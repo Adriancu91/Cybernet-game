@@ -128,6 +128,36 @@ function applyAnswer(m, p, correct, t, timeout, choice, human) {
   p.last = { correct, t, timeout, choice, pts, human: !!human };
   p.score += pts;
   if (correct) p.correct++;
+  if (correct && p.isPlayer && chance(CONFIG.LOOT.perCorrect)) {
+    const d = rollLoot(CONFIG.LOOT.cache, m.league, 'Data Cache');
+    if (d) { (m.loot = m.loot || []).push(d); m.lastLoot = { text: d.text, round: m.round }; }
+  }
+}
+// ---------- random loot ----------
+function rollLoot(table, league, source) {
+  const e = table[weightedIndex(table.map(x => x.weight))];
+  const L = CONFIG.LEAGUES[league];
+  let text = '';
+  if (e.kind === 'dt') { const n = addDT(randInt(e.min, e.max)); text = `+${n} DT`; }
+  else if (e.kind === 'cr') { const n = addCR(randInt(e.min, e.max) * L.reward, 'loot'); text = `+${fmt(n)} CR`; }
+  else if (e.kind === 'shards') { const n = addShards(randInt(e.min, e.max)); text = `+${n} shards`; }
+  else if (e.kind === 'stamina') {
+    if (S.player.stamina < CONFIG.SOLO.staminaMax) { S.player.stamina++; text = '+1 stamina'; }
+    else { const n = addDT(10); text = `+${n} DT`; }
+  } else if (e.kind === 'nft') {
+    const n = giveNFT(mintNFT(S.player.league >= 3 && chance(0.15) ? { level: 2 } : {}), source.toLowerCase());
+    if (!n) return null;
+    text = `NFT: ${nftName(n)} L${n.level} (${CONFIG.NFT.rarities[n.rarity].name})`;
+    return { kind: 'nft', text, nft: n, source };
+  }
+  count('lootDrops');
+  log('ARENA', `${source}: ${text}`);
+  return { kind: e.kind, text, source };
+}
+function rollCrate(m, good) {
+  const p = (m.type === 'solo' ? CONFIG.LOOT.crateSolo : CONFIG.LOOT.crateMulti) + (good ? CONFIG.LOOT.crateWinBonus : 0);
+  if (!chance(p)) return null;
+  return rollLoot(CONFIG.LOOT.table, m.league, 'Loot crate');
 }
 function canOverride(m, now) {
   if (!m || m.phase !== 'question') return 'No active question';
@@ -248,6 +278,9 @@ function finishMatch(m) {
     if (place === 1) count('multiWins');
     log('ARENA', `Multiplayer finished #${place}/${m.parts.length}: ${me.correct}/${m.rounds} correct, +${fmt(res.cr)} CR, rating ${old} -> ${S.player.rating} (${delta >= 0 ? '+' : ''}${delta}).`);
   }
+  const good = m.type === 'solo' ? res.win : res.place <= 3;
+  const crate = rollCrate(m, good);
+  res.loot = (m.loot || []).concat(crate ? [crate] : []);
   m.result = res;
   if (typeof saveGame === 'function' && typeof window !== 'undefined') saveGame();
   return res;

@@ -198,6 +198,7 @@ function htmlArena() {
       ${btn('Find Match', 'startMulti', undefined, whyMulti(), 'block primary big')}</div>
   </div>
   ${UI.lastResult ? `<div class="card" style="margin-top:10px"><h4>Last match</h4><div class="small">${UI.lastResult}</div></div>` : ''}
+  <div class="card" style="margin-top:10px"><h4>Random loot</h4><div class="small dim">Every correct answer has a ${Math.round(CONFIG.LOOT.perCorrect * 100)}% chance to find a <b class="warn">Data Cache</b> (DT, CR or shards). After each match: ${Math.round(CONFIG.LOOT.crateSolo * 100)}% (Solo) / ${Math.round(CONFIG.LOOT.crateMulti * 100)}% (Multiplayer) chance of a <b class="warn">Loot crate</b>, +${Math.round(CONFIG.LOOT.crateWinBonus * 100)}% if you win or finish top 3 — it can hold DT, CR, shards, stamina or an NFT.</div></div>
   <div class="tiny mute" style="margin-top:10px">Tip: in a match, press HUMAN OVERRIDE before your AI answers to answer yourself — fast and correct gives max points, wrong gives zero.</div>`;
 }
 function htmlMatch(m) {
@@ -233,6 +234,7 @@ function htmlMatch(m) {
     <div class="qtext">${esc(q.text)}</div><div class="opts">${opts}</div>
     <div class="timer" style="margin-top:12px"><i id="tbar"></i></div></div>
     <div class="row between">${myStatus}${ov}</div>
+    ${m.lastLoot && m.lastLoot.round === m.round ? `<div class="loot-pop">◆ DATA CACHE FOUND: ${esc(m.lastLoot.text)}</div>` : ''}
     <h4 style="margin-top:12px">${m.type === 'multi' ? 'Live standings' : 'Run'}</h4><div class="parts">${rows}</div>`;
 }
 function htmlResult(m) {
@@ -247,10 +249,12 @@ function htmlResult(m) {
     if (r.refund) lines.push(`Entry fee refunded: ${fmt(r.refund)} CR`);
   }
   lines.push(`<span class="cr">+${fmt(r.cr)} CR</span>${r.bonus ? ` <span class="dim">(incl. +${fmt(r.bonus)} bonus)</span>` : ''}${r.dt ? ` · <span class="dtc">+${r.dt} DT</span>` : ''}`);
+  if (r.loot && r.loot.length) lines.push(`<b class="warn">LOOT:</b> ${r.loot.map(l => `<span class="good">${esc(l.text)}</span> <span class="tiny dim">(${esc(l.source)})</span>`).join(' · ')}`);
   if (r.tax) lines.push(`<span class="gvc">Guild vault +${fmt(r.tax)} GV</span> <span class="dim">(bonus, not taken from you)</span>`);
   const standings = m.type === 'multi' ? m.parts.slice().sort((a, b) => b.score - a.score).map((p, i) => `<div class="part ${p.isPlayer ? 'me' : ''}"><span class="dim">${i + 1}</span><span>${esc(p.name)}</span><span class="st">${p.correct}/${m.rounds}</span><b>${fmt(p.score)}</b></div>`).join('') : '';
   return `<div class="card center" style="padding:20px"><div class="result-big">${big}</div>${lines.map(l => `<div style="margin-top:6px">${l}</div>`).join('')}
     ${r.nft ? `<div style="margin:14px auto 0;max-width:180px">${nftCard(r.nft)}</div><div class="good small">NFT DROP!</div>` : ''}
+    ${(r.loot || []).filter(l => l.nft).map(l => `<div style="margin:14px auto 0;max-width:180px">${nftCard(l.nft)}</div><div class="good small">LOOT NFT!</div>`).join('')}
     <div class="row" style="justify-content:center;margin-top:16px">${btn('Back to Arena', 'resultOk', undefined, '', 'primary big')}</div></div>
     ${standings ? `<h4 style="margin-top:12px">Final standings</h4><div class="parts">${standings}</div>` : ''}`;
 }

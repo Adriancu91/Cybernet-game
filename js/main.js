@@ -81,6 +81,7 @@
       UI.lastResult = m.type === 'solo'
         ? `Solo ${r.win ? '<span class="good">WON</span>' : '<span class="bad">failed</span>'} — ${r.correct}/${r.rounds} correct, <span class="cr">+${fmt(r.cr)} CR</span>`
         : `Multiplayer #${r.place}/${r.of} — <span class="cr">+${fmt(r.cr)} CR</span>, rating ${r.ratingDelta >= 0 ? '+' : ''}${r.ratingDelta}`;
+      if (r.loot && r.loot.length) UI.lastResult += ` · loot: ${r.loot.map(l => esc(l.text)).join(', ')}`;
       setPetState(r.win || r.place === 1 ? 'correct' : 'idle', 1500);
       if (UI.centerTab !== 'arena') toast('Match finished: ' + UI.lastResult.replace(/<[^>]+>/g, ''));
     }

@@ -129,6 +129,27 @@ const CONFIG = {
     drop: [0.35, 0.20, 0.10],  // NFT drop chance for place 1..3
   },
 
+  // ---------- random arena loot ----------
+  LOOT: {
+    perCorrect: 0.07,          // chance of a Data Cache each time YOUR side answers correctly
+    crateSolo: 0.40,           // chance of a loot crate at the end of a Solo run (win or lose)
+    crateMulti: 0.50,          // chance of a loot crate at the end of a Multiplayer match
+    crateWinBonus: 0.25,       // extra crate chance for a solo win / multiplayer top 3
+    // crate contents: weight, and amounts (CR scales with league reward)
+    table: [
+      { kind: 'dt',     weight: 40, min: 5,  max: 15 },
+      { kind: 'cr',     weight: 25, min: 30, max: 120 },
+      { kind: 'shards', weight: 20, min: 5,  max: 15 },
+      { kind: 'nft',    weight: 12 },
+      { kind: 'stamina', weight: 3 },
+    ],
+    cache: [
+      { kind: 'dt',     weight: 60, min: 1, max: 4 },
+      { kind: 'cr',     weight: 30, min: 5, max: 25 },
+      { kind: 'shards', weight: 10, min: 1, max: 4 },
+    ],
+  },
+
   // ---------- bots ----------
   BOTS: {
     count: 80,

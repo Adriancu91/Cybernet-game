@@ -166,6 +166,7 @@ textarea { font-family: var(--font); font-size: 11px; resize: vertical; }
 @keyframes flashOk { 0% { background: rgba(57,255,136,.35); } }
 @keyframes flashBad { 0% { background: rgba(255,59,92,.35); } }
 .override-btn { background: linear-gradient(180deg, rgba(255,79,216,.25), rgba(255,79,216,.05)); border-color: var(--c); color: var(--c); font-weight: 800; letter-spacing: .06em; }
+.loot-pop { margin-top: 8px; padding: 6px 10px; border: 1px solid var(--warn); border-radius: var(--r); color: var(--warn); font-weight: 700; font-size: 13px; background: rgba(255,176,32,.08); animation: toastIn .3s; }
 .lives { color: var(--bad); letter-spacing: 2px; font-size: 16px; }
 .result-big { font-size: 34px; font-weight: 900; color: var(--a); text-align: center; }
 .stamina i { display: inline-block; width: 16px; height: 8px; border-radius: 2px; margin-right: 3px; background: var(--line); }
