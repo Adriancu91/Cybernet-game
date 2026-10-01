@@ -9,7 +9,7 @@ const Art = (() => {
   const BG = '#060a10';
   const f1 = v => (Math.round(v * 10) / 10).toString();
 
-  // ---------- slot silhouettes (with dna variations) ----------
+  // ---------- card silhouettes (with dna variations) ----------
   function core(r, a, b) {
     const sides = 6 + Math.floor(r() * 3) * 2, rad = 30 + r() * 6, rot = r() * Math.PI;
     let pts = '';
@@ -18,13 +18,6 @@ const Art = (() => {
     return `<polygon points="${pts}" fill="${BG}" stroke="${a}" stroke-width="3"/>` +
       `<circle cx="80" cy="80" r="${f1(inner)}" fill="${b}"/><circle cx="80" cy="80" r="${f1(inner * 0.45)}" fill="${BG}"/>` +
       `<circle cx="80" cy="80" r="${f1(inner * 0.2)}" fill="${a}"/>`;
-  }
-  function lens(r, a, b) {
-    const R = 30 + r() * 6, iris = 16 + r() * 6, lash = 6 + Math.floor(r() * 6);
-    let s = `<ellipse cx="80" cy="80" rx="${f1(R + 8)}" ry="${f1(R * 0.62)}" fill="${BG}" stroke="${a}" stroke-width="2.5"/>`;
-    for (let i = 0; i < lash; i++) { const an = Math.PI + (i + 0.5) * Math.PI / lash; s += `<line x1="${f1(80 + Math.cos(an) * (R + 2))}" y1="${f1(80 + Math.sin(an) * R * 0.7)}" x2="${f1(80 + Math.cos(an) * (R + 10))}" y2="${f1(80 + Math.sin(an) * (R * 0.7 + 8))}" stroke="${b}" stroke-width="2"/>`; }
-    s += `<circle cx="80" cy="80" r="${f1(iris)}" fill="${b}" opacity=".45"/><circle cx="80" cy="80" r="${f1(iris * 0.6)}" fill="${a}"/><circle cx="80" cy="80" r="${f1(iris * 0.28)}" fill="${BG}"/><circle cx="${f1(80 + iris * 0.3)}" cy="${f1(80 - iris * 0.3)}" r="3" fill="#fff"/>`;
-    return s;
   }
   function spine(r, a, b) {
     const n = 5 + Math.floor(r() * 3), h = 84 / n;
@@ -36,28 +29,32 @@ const Art = (() => {
     }
     return s;
   }
-  function crown(r, a, b) {
-    const spikes = 3 + Math.floor(r() * 3), top = 40 + r() * 8;
-    let pts = '46,106 ';
-    for (let i = 0; i <= spikes * 2; i++) {
-      const x = 46 + i * 68 / (spikes * 2);
-      const y = i % 2 === 0 ? (i === 0 || i === spikes * 2 ? 58 : 76) : top + r() * 10;
-      pts += f1(x) + ',' + f1(y) + ' ';
+  // hardware board: a chip with pins and traces
+  function board(r, a, b) {
+    const w = 46 + r() * 10, h = 46 + r() * 10, x = 80 - w / 2, y = 80 - h / 2, pins = 5 + Math.floor(r() * 3);
+    let s = `<rect x="${f1(x)}" y="${f1(y)}" width="${f1(w)}" height="${f1(h)}" rx="5" fill="${BG}" stroke="${a}" stroke-width="3"/>`;
+    for (let i = 0; i < pins; i++) {
+      const px = x + 6 + i * (w - 12) / (pins - 1), py = y + 6 + i * (h - 12) / (pins - 1);
+      s += `<line x1="${f1(px)}" y1="${f1(y - 9)}" x2="${f1(px)}" y2="${f1(y)}" stroke="${b}" stroke-width="2"/><line x1="${f1(px)}" y1="${f1(y + h)}" x2="${f1(px)}" y2="${f1(y + h + 9)}" stroke="${b}" stroke-width="2"/>`;
+      s += `<line x1="${f1(x - 9)}" y1="${f1(py)}" x2="${f1(x)}" y2="${f1(py)}" stroke="${b}" stroke-width="2"/><line x1="${f1(x + w)}" y1="${f1(py)}" x2="${f1(x + w + 9)}" y2="${f1(py)}" stroke="${b}" stroke-width="2"/>`;
     }
-    pts += '114,106';
-    let s = `<polygon points="${pts}" fill="${BG}" stroke="${a}" stroke-width="3" stroke-linejoin="round"/><rect x="44" y="104" width="72" height="12" rx="2" fill="${b}"/>`;
-    for (let i = 0; i < spikes; i++) { const x = 46 + (i * 2 + 1) * 68 / (spikes * 2); s += `<circle cx="${f1(x)}" cy="${f1(top + 2)}" r="3.5" fill="${b}"/>`; }
-    s += `<circle cx="80" cy="110" r="3" fill="${BG}"/>`;
+    s += `<rect x="${f1(x + w * 0.28)}" y="${f1(y + h * 0.28)}" width="${f1(w * 0.44)}" height="${f1(h * 0.44)}" rx="3" fill="${a}" opacity=".85"/><circle cx="${f1(x + 9)}" cy="${f1(y + 9)}" r="2.5" fill="${b}"/>`;
     return s;
   }
-  function key(r, a, b) {
-    const bow = 14 + r() * 5, teeth = 2 + Math.floor(r() * 3), len = 40 + r() * 10;
-    let s = `<circle cx="58" cy="80" r="${f1(bow)}" fill="${BG}" stroke="${a}" stroke-width="4"/><circle cx="58" cy="80" r="${f1(bow * 0.35)}" fill="${b}"/>` +
-      `<rect x="${f1(58 + bow)}" y="76.5" width="${f1(len)}" height="7" fill="${a}"/>`;
-    for (let i = 0; i < teeth; i++) { const x = 58 + bow + len - 6 - i * 10, h = 8 + r() * 8; s += `<rect x="${f1(x)}" y="83" width="6" height="${f1(h)}" fill="${b}"/>`; }
+  // cooler: a fan with blades
+  function fan(r, a, b) {
+    const blades = 5 + Math.floor(r() * 4), R = 34 + r() * 4, tw = 0.5 + r() * 0.4;
+    let s = `<rect x="${f1(80 - R - 6)}" y="${f1(80 - R - 6)}" width="${f1(2 * R + 12)}" height="${f1(2 * R + 12)}" rx="10" fill="${BG}" stroke="${a}" stroke-width="2.5"/>`;
+    s += `<circle cx="80" cy="80" r="${f1(R)}" fill="none" stroke="${b}" stroke-width="1.5" opacity=".6"/><g class="card-fan" style="transform-origin:80px 80px">`;
+    for (let i = 0; i < blades; i++) {
+      const an = i * 2 * Math.PI / blades, x1 = 80 + Math.cos(an) * 10, y1 = 80 + Math.sin(an) * 10;
+      const x2 = 80 + Math.cos(an + tw) * (R - 3), y2 = 80 + Math.sin(an + tw) * (R - 3), cx = 80 + Math.cos(an + tw * 0.2) * R * 0.75, cy = 80 + Math.sin(an + tw * 0.2) * R * 0.75;
+      s += `<path d="M${f1(x1)} ${f1(y1)} Q${f1(cx)} ${f1(cy)} ${f1(x2)} ${f1(y2)}" fill="none" stroke="${a}" stroke-width="5" stroke-linecap="round"/>`;
+    }
+    s += `</g><circle cx="80" cy="80" r="10" fill="${b}"/><circle cx="80" cy="80" r="4" fill="${BG}"/>`;
     return s;
   }
-  const SLOTS = [core, lens, spine, crown, key];
+  const SILHOUETTE = { core: core, memory: spine, hardware: board, cooler: fan };
   const GLYPH = {
     cr: (x, y, c) => `<circle cx="${x}" cy="${y}" r="4" fill="none" stroke="${c}" stroke-width="1.4"/><line x1="${x}" y1="${y - 2}" x2="${x}" y2="${y + 2}" stroke="${c}" stroke-width="1.4"/>`,
     speed: (x, y, c) => `<polyline points="${x - 2},${y - 4} ${x + 1},${y} ${x - 1},${y} ${x + 2},${y + 4}" fill="none" stroke="${c}" stroke-width="1.4"/>`,
@@ -66,14 +63,17 @@ const Art = (() => {
     comm: (x, y, c) => `<polygon points="${x},${y - 4} ${x + 4},${y} ${x},${y + 4} ${x - 4},${y}" fill="none" stroke="${c}" stroke-width="1.4"/>`,
   };
 
-  function nft(n) {
-    const k = [n.dna, n.theme, n.slot, n.level, n.rarity, n.stars || 0].join(':');
+  function card(n) {
+    const k = [n.dna, n.type, n.plus, n.rarity, (n.bonus || []).map(x => x.type).join('')].join(':');
     if (cache.has(k)) return cache.get(k);
     const r = seededRng(n.dna);
-    const th = CONFIG.NFT.themes.find(t => t.id === n.theme) || CONFIG.NFT.themes[0];
-    const R = CONFIG.NFT.rarities[n.rarity];
-    const [a, b] = th.c;
-    let s = `<svg viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg" class="nft-svg ${n.rarity === 3 ? 'legendary' : ''}"><rect width="160" height="160" fill="${BG}"/>`;
+    const T = CONFIG.CARDS.types.find(t => t.id === n.type) || CONFIG.CARDS.types[0];
+    const R = CONFIG.CARDS.rarities[n.rarity] || CONFIG.CARDS.rarities[0];
+    const uniq = n.rarity === CONFIG.CARDS.UNIQUE, legend = n.rarity >= 4;
+    const [a, b] = T.c;
+    const gid = 'u' + (n.dna >>> 0).toString(36);
+    let s = `<svg viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg" class="nft-svg ${legend ? 'legendary' : ''}"><rect width="160" height="160" fill="${BG}"/>`;
+    if (uniq) s += `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4fd8"/><stop offset=".35" stop-color="#ffe14d"/><stop offset=".7" stop-color="#39ff88"/><stop offset="1" stop-color="#00e5ff"/></linearGradient></defs>`;
     // background circuit traces unique to this dna
     const traces = 10 + Math.floor(r() * 6);
     for (let i = 0; i < traces; i++) {
@@ -81,30 +81,20 @@ const Art = (() => {
       const c = r() < 0.5 ? a : b;
       s += `<polyline points="${f1(x)},${f1(y)} ${f1(x2)},${f1(y)} ${f1(x2)},${f1(y2)}" fill="none" stroke="${c}" stroke-width=".8" opacity=".22"/><circle cx="${f1(x2)}" cy="${f1(y2)}" r="1.6" fill="${c}" opacity=".45"/>`;
     }
-    // theme texture
-    const style = CONFIG.NFT.themes.indexOf(th) % 3;
-    if (style === 0) for (let i = 0; i < 4; i++) s += `<line x1="0" y1="${f1(20 + i * 40 + r() * 10)}" x2="160" y2="${f1(20 + i * 40)}" stroke="${a}" stroke-width=".4" opacity=".25"/>`;
-    else if (style === 1) for (let i = 0; i < 3; i++) s += `<circle cx="${f1(r() * 160)}" cy="${f1(r() * 160)}" r="${f1(10 + r() * 25)}" fill="none" stroke="${b}" stroke-width=".5" opacity=".25"/>`;
-    else for (let i = 0; i < 6; i++) s += `<rect x="${f1(r() * 150)}" y="${f1(r() * 150)}" width="${f1(4 + r() * 10)}" height="${f1(2 + r() * 4)}" fill="${a}" opacity=".18"/>`;
-    // level rings
-    const rings = Math.min(n.level, 5);
-    for (let k2 = 0; k2 < rings; k2++) s += `<circle cx="80" cy="80" r="${46 + k2 * 6.5}" fill="none" stroke="${R.color}" stroke-width=".9" stroke-dasharray="${2 + k2 * 2} ${3 + k2 + Math.floor(r() * 3)}" opacity=".75"/>`;
-    // halo for L6+
-    if (n.level >= 6) s += `<g class="nft-spin" style="transform-origin:80px 80px"><circle cx="80" cy="80" r="76" fill="none" stroke="${a}" stroke-width="1.5" stroke-dasharray="1 7"/><circle cx="80" cy="4" r="2.5" fill="${b}"/></g>`;
-    // particles
-    for (let p = 0; p < Math.min(n.level * 3, 30); p++) {
+    // rarity rings (one per rarity step) and upgrade sparks (one ring of dots per +)
+    for (let k2 = 0; k2 < Math.min(n.rarity + 1, 6); k2++) s += `<circle cx="80" cy="80" r="${46 + k2 * 5.5}" fill="none" stroke="${uniq ? `url(#${gid})` : R.color}" stroke-width=".9" stroke-dasharray="${2 + k2 * 2} ${3 + k2 + Math.floor(r() * 3)}" opacity=".75"/>`;
+    for (let p = 0; p < (n.plus + 1) * 5; p++) {
       const an = r() * Math.PI * 2, d = 44 + r() * 32;
       s += `<circle cx="${f1(80 + Math.cos(an) * d)}" cy="${f1(80 + Math.sin(an) * d)}" r="${f1(0.8 + r() * 1.4)}" fill="${b}"/>`;
     }
-    // main silhouette
+    if (legend) s += `<g class="nft-spin" style="transform-origin:80px 80px"><circle cx="80" cy="80" r="76" fill="none" stroke="${uniq ? `url(#${gid})` : a}" stroke-width="1.5" stroke-dasharray="1 7"/><circle cx="80" cy="4" r="2.5" fill="${b}"/></g>`;
     const rot = (r() - 0.5) * 16;
-    s += `<g transform="rotate(${f1(rot)} 80 80)">${SLOTS[n.slot](r, a, b)}</g>`;
-    if (n.level >= 10) s += `<g class="nft-pulse" style="transform-origin:80px 80px"><circle cx="80" cy="80" r="40" fill="none" stroke="#fff" stroke-width="1" opacity=".6"/></g>`;
-    // frame, badge, glyphs, serial
-    s += `<rect x="1.5" y="1.5" width="157" height="157" rx="8" fill="none" stroke="${R.color}" stroke-width="3" class="${n.rarity === 3 ? 'nft-glow' : ''}"/>`;
-    s += `<rect x="6" y="6" width="36" height="15" rx="2" fill="${R.color}"/><text x="24" y="17" text-anchor="middle" font-family="monospace" font-size="10" font-weight="bold" fill="${BG}">LV${n.level}</text>`;
-    (n.affixes || []).forEach((af, i) => { s += GLYPH[af.type](146 - i * 12, 14, R.color); });
-    if (n.stars) for (let i = 0; i < Math.min(n.stars, 5); i++) s += `<text x="${10 + i * 10}" y="152" font-size="10" fill="#ffe14d">★</text>`;
+    s += `<g transform="rotate(${f1(rot)} 80 80)">${(SILHOUETTE[n.type] || core)(r, a, b)}</g>`;
+    if (uniq) s += `<g class="nft-pulse" style="transform-origin:80px 80px"><circle cx="80" cy="80" r="42" fill="none" stroke="url(#${gid})" stroke-width="2" opacity=".8"/></g>`;
+    // frame, rarity tag, + badge, bonus glyphs, serial
+    s += `<rect x="1.5" y="1.5" width="157" height="157" rx="8" fill="none" stroke="${uniq ? `url(#${gid})` : R.color}" stroke-width="${uniq ? 4 : 3}" class="${legend ? 'nft-glow' : ''}"/>`;
+    s += `<rect x="6" y="6" width="${n.plus ? 46 : 26}" height="15" rx="2" fill="${uniq ? `url(#${gid})` : R.color}"/><text x="${n.plus ? 29 : 19}" y="17" text-anchor="middle" font-family="monospace" font-size="10" font-weight="bold" fill="${BG}">${R.name.slice(0, uniq ? 3 : 1).toUpperCase()}${n.plus ? ' +' + n.plus : ''}</text>`;
+    (n.bonus || []).forEach((bn, i) => { if (GLYPH[bn.type]) s += GLYPH[bn.type](146 - i * 12, 14, uniq ? '#ffe14d' : R.color); });
     s += `<text x="154" y="154" text-anchor="end" font-family="monospace" font-size="9" fill="${a}" opacity=".85">#0x${(n.dna >>> 0).toString(16).toUpperCase().padStart(8, '0').slice(-6)}</text></svg>`;
     cache.set(k, s);
     if (cache.size > 800) cache.delete(cache.keys().next().value);
@@ -146,7 +136,7 @@ const Art = (() => {
     const k = 'em:' + seed + ':' + size;
     if (cache.has(k)) return cache.get(k);
     const r = seededRng(seed);
-    const pal = CONFIG.NFT.themes[Math.floor(r() * CONFIG.NFT.themes.length)].c;
+    const pal = CONFIG.CARDS.types[Math.floor(r() * CONFIG.CARDS.types.length)].c;
     const a = pal[0], b = pal[1];
     let s = `<svg viewBox="0 0 64 64" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg"><path d="M32 3 L58 12 L55 38 Q50 54 32 61 Q14 54 9 38 L6 12 Z" fill="#0b1320" stroke="${a}" stroke-width="3"/>`;
     const g = Math.floor(r() * 5);
@@ -187,6 +177,7 @@ const Art = (() => {
     alert: '<path d="M12 3l10 18H2z M12 10v5 M12 18v.5" fill="none" stroke="currentColor" stroke-width="2"/>',
     pet: '<rect x="5" y="7" width="14" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9.5" cy="12" r="1.5" fill="currentColor"/><circle cx="14.5" cy="12" r="1.5" fill="currentColor"/><path d="M12 7V3" stroke="currentColor" stroke-width="2"/>',
     nft: '<rect x="4" y="3" width="16" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><polygon points="12,7 16,12 12,17 8,12" fill="currentColor"/>',
+    ai: '<circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 3"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3" stroke="currentColor" stroke-width="2"/>',
     season: '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 3" stroke="currentColor" stroke-width="2" fill="none"/>',
     log: '<path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="2"/>',
   };
@@ -251,5 +242,5 @@ const Art = (() => {
     return s + '</svg>';
   }
 
-  return { nft, pet, emblem, badge, icon, landMap, lineChart, cacheSize: () => cache.size, clear: () => cache.clear() };
+  return { card, nft: card, pet, emblem, badge, icon, landMap, lineChart, cacheSize: () => cache.size, clear: () => cache.clear() };
 })();

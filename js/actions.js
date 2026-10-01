@@ -131,19 +131,22 @@ function actDemolishStand(id) {
 function actSolo(now) { return startSolo(now); }
 function actMulti(now) { return startMulti(now); }
 
-// ---------- NFTs ----------
+// ---------- cards ----------
 function whyEquip(id) {
-  const n = S.inv.find(x => x.id === id);
-  if (!n) return 'Not found';
+  const c = S.inv.find(x => x.id === id);
+  if (!c) return 'Not found';
   if (isEquipped(id)) return 'Already equipped';
-  if (n.listed) return 'Listed on market';
-  if (S.equipped.length >= CONFIG.NFT.equipSlots) return `All ${CONFIG.NFT.equipSlots} equip slots are full`;
+  if (c.listed) return 'Listed on market';
   return '';
 }
+// one card per type: equipping replaces the card of the same type
 function actEquip(id) {
   const r = whyEquip(id); if (r) return fail(r);
+  const c = S.inv.find(x => x.id === id);
+  const old = equippedOfType(c.type);
+  S.equipped = S.equipped.filter(x => !old || x !== old.id);
   S.equipped.push(id);
-  return ok('Equipped');
+  return ok(old ? `Equipped (replaced ${cardLabel(old)})` : 'Equipped');
 }
 function actUnequip(id) {
   if (!isEquipped(id)) return fail('Not equipped');
@@ -151,57 +154,55 @@ function actUnequip(id) {
   return ok('Unequipped');
 }
 function actToggleLock(id) {
-  const n = S.inv.find(x => x.id === id);
-  if (!n) return fail('Not found');
-  n.locked = !n.locked;
-  return ok(n.locked ? 'Locked' : 'Unlocked');
+  const c = S.inv.find(x => x.id === id);
+  if (!c) return fail('Not found');
+  c.locked = !c.locked;
+  return ok(c.locked ? 'Locked' : 'Unlocked');
 }
-function actFuse(ids) {
-  const r = whyFuse(ids); if (r) return fail(r);
-  const out = doFusion(ids);
-  return Object.assign(ok('Fusion complete'), { nft: out });
+function actUpgradeCard(id) {
+  const r = whyUpgradeCard(id); if (r) return fail(r);
+  const c = doUpgradeCard(id);
+  return Object.assign(ok(`${cardName(c)} upgraded to +${c.plus}`), { card: c });
 }
-function actAscend(ids) {
-  const r = whyAscend(ids); if (r) return fail(r);
-  spendCR(CONFIG.NFT.ascensionFee, 'fusion');
-  const keep = S.inv.find(n => n.id === ids[0]);
-  S.inv = S.inv.filter(n => !ids.includes(n.id) || n === keep);
-  keep.stars = (keep.stars || 0) + 1;
-  S.player.ascensions++;
-  log('SYSTEM', `ASCENSION: ${nftName(keep)} gained a prestige star (${keep.stars}).`);
-  return ok('Ascended');
+function actEvolveCard(id) {
+  const r = whyEvolveCard(id); if (r) return fail(r);
+  const c = doEvolveCard(id);
+  return Object.assign(ok(`Evolved into ${rarityOf(c.rarity).name}!`), { card: c });
+}
+function actRerollCard(id) {
+  const r = whyRerollCard(id); if (r) return fail(r);
+  const c = doRerollCard(id);
+  return Object.assign(ok('New bonus stats rolled'), { card: c });
 }
 function whySalvage(id) {
-  const n = S.inv.find(x => x.id === id);
-  if (!n) return 'Not found';
-  return nftStatusReason(n);
+  const c = S.inv.find(x => x.id === id);
+  if (!c) return 'Not found';
+  return cardStatusReason(c);
 }
 function actSalvage(ids) {
   if (!Array.isArray(ids)) ids = [ids];
   ids = [...new Set(ids)];
   for (const id of ids) { const r = whySalvage(id); if (r) return fail(r); }
-  if (!ids.length) return fail('Select NFTs to salvage');
+  if (!ids.length) return fail('Select cards to salvage');
   let total = 0;
-  for (const id of ids) { const n = S.inv.find(x => x.id === id); total += salvageValue(n); }
-  S.inv = S.inv.filter(n => !ids.includes(n.id));
+  for (const id of ids) { const c = S.inv.find(x => x.id === id); total += salvageValue(c); }
+  S.inv = S.inv.filter(c => !ids.includes(c.id));
   addShards(total);
   missionProgress('salvage', ids.length);
-  log('SYSTEM', `Salvaged ${ids.length} NFT(s) into ${total} shards.`);
+  log('SYSTEM', `Salvaged ${ids.length} card(s) into ${total} shards.`);
   return ok(`+${total} shards`);
 }
-function whyShardBuy(theme, slot) {
-  if (!themeById(theme)) return 'Choose a theme';
-  if (!(slot >= 0 && slot <= 4)) return 'Choose a slot';
+function whyForge(type) {
+  if (!CONFIG.CARDS.types.find(t => t.id === type)) return 'Choose a type';
   if (invFull()) return 'Inventory full';
-  if (S.player.shards < CONFIG.NFT.shardBuyCost) return `Need ${CONFIG.NFT.shardBuyCost - S.player.shards} more shards`;
+  if (S.player.shards < CONFIG.CARDS.forgeCost) return `Need ${CONFIG.CARDS.forgeCost - S.player.shards} more shards`;
   return '';
 }
-function actShardBuy(theme, slot) {
-  slot = Number(slot);
-  const r = whyShardBuy(theme, slot); if (r) return fail(r);
-  S.player.shards -= CONFIG.NFT.shardBuyCost;
-  const n = giveNFT(mintNFT({ theme, slot, level: 1 }), 'shard exchange');
-  return Object.assign(ok('NFT forged from shards'), { nft: n });
+function actForge(type) {
+  const r = whyForge(type); if (r) return fail(r);
+  S.player.shards -= CONFIG.CARDS.forgeCost;
+  const c = giveCard(mintCard({ type, rarity: 0 }), 'shard forge');
+  return Object.assign(ok('Card forged from shards'), { card: c });
 }
 
 // ---------- guild ----------
@@ -276,32 +277,32 @@ function actBuyListing(lid) {
   const l = S.market.listings.find(x => x.id === lid);
   spendCR(l.price, 'market');
   S.market.listings = S.market.listings.filter(x => x !== l);
-  l.nft.listed = null;
-  giveNFT(l.nft, 'market purchase');
-  recordTrade(l.nft, l.price);
-  count('nftBought');
-  missionProgress('buy_nft', 1);
-  log('TRADE', `You bought ${nftName(l.nft)} L${l.nft.level} for ${fmt(l.price)} CR from ${(botById(l.seller) || { name: 'a trader' }).name}.`);
+  l.card.listed = null;
+  giveCard(l.card, 'market purchase');
+  recordTrade(l.card, l.price);
+  count('cardBought');
+  missionProgress('buy_card', 1);
+  log('TRADE', `You bought ${cardLabel(l.card)} for ${fmt(l.price)} CR from ${(botById(l.seller) || { name: 'a trader' }).name}.`);
   return ok('Purchased');
 }
-function actListNFT(nid, price, venue) {
+function actListCard(nid, price, venue) {
   price = Math.floor(Number(price));
   venue = venue === 'stand' ? 'stand' : 'server';
   const r = whyList(nid, price, venue); if (r) return fail(r);
   const n = S.inv.find(x => x.id === nid);
   const fee = listingFee(price);
   spendCR(fee, 'listing');
-  const l = { id: newId('l'), nftId: nid, price, seller: 'player', venue, expires: S.time + CONFIG.MARKET.listingTtlMs };
+  const l = { id: newId('l'), cardId: nid, price, seller: 'player', venue, expires: S.time + CONFIG.MARKET.listingTtlMs };
   n.listed = l.id;
   S.equipped = S.equipped.filter(id => id !== nid);
   S.market.listings.push(l);
-  log('TRADE', `Listed ${nftName(n)} L${n.level} for ${fmt(price)} CR on the ${venue === 'stand' ? 'your stand' : 'server market'} (fee ${fee} CR).`);
+  log('TRADE', `Listed ${cardLabel(n)} for ${fmt(price)} CR on the ${venue === 'stand' ? 'your stand' : 'server market'} (fee ${fee} CR).`);
   return ok('Listed');
 }
 function actCancelListing(lid) {
   const l = S.market.listings.find(x => x.id === lid && x.seller === 'player');
   if (!l) return fail('Listing not found');
-  const n = S.inv.find(x => x.id === l.nftId);
+  const n = S.inv.find(x => x.id === l.cardId);
   if (n) n.listed = null;
   S.market.listings = S.market.listings.filter(x => x !== l);
   return ok('Listing cancelled (fee not refunded)');
@@ -310,7 +311,7 @@ function actBuildMarketStand() {
   const r = whyBuildMarketStand(); if (r) return fail(r);
   spendCR(CONFIG.MARKET.standCost, 'marketStand');
   S.market.stand = { level: 0, built: S.time };
-  log('TRADE', `Your NFT Marketplace Stand is OPEN. You earn ${CONFIG.MARKET.standFee * 100}% of every trade routed through it.`);
+  log('TRADE', `Your Card Marketplace Stand is OPEN. You earn ${CONFIG.MARKET.standFee * 100}% of every trade routed through it.`);
   return ok('Stand opened');
 }
 function actUpgradeMarketStand() {
@@ -343,7 +344,7 @@ function actClaimMission(i) {
   addDT(m.reward.dt); addCR(m.reward.cr, 'missions'); addShards(m.reward.shards);
   const n = rollDrop(0.25, 'mission reward');
   count('missionsDone');
-  return ok(`+${m.reward.dt} DT, +${fmt(m.reward.cr)} CR, +${m.reward.shards} shards${n ? ', +1 NFT!' : ''}`);
+  return ok(`+${m.reward.dt} DT, +${fmt(m.reward.cr)} CR, +${m.reward.shards} shards${n ? ', +1 card!' : ''}`);
 }
 function actRebirth() {
   const r = whyRebirth(); if (r) return fail(r);
@@ -352,7 +353,7 @@ function actRebirth() {
   p.math = CONFIG.START.math; p.trivia = CONFIG.START.trivia; p.speedPoints = 0;
   p.rating = CONFIG.START.rating; p.league = 0;
   S.stands = [];
-  log('SYSTEM', `NEURAL REBIRTH #${p.rebirths}: +${gain} Legacy (now ${p.legacy}, permanent +${Math.round(legacyBonus() * 100)}% training & CR). Stats and stands reset; NFTs, land, CR, guild and cosmetics kept.`);
+  log('SYSTEM', `NEURAL REBIRTH #${p.rebirths}: +${gain} Legacy (now ${p.legacy}, permanent +${Math.round(legacyBonus() * 100)}% training & CR). Stats and stands reset; cards, land, CR, guild and cosmetics kept.`);
   return ok('Reborn');
 }
 function actSetName(name) {
@@ -381,25 +382,25 @@ function actExplore(i) {
   else if (kind === 'shards') text = `+${addShards(randInt(e.min, e.max))} shards`;
   else if (kind === 'jackpot') text = `JACKPOT +${fmt(addCR(randInt(e.min, e.max), 'explore'))} CR`;
   else {
-    const n = giveNFT(mintNFT({}), 'land exploration');
-    if (n) text = `NFT: ${nftName(n)} [${CONFIG.NFT.rarities[n.rarity].name}]`;
+    const n = giveCard(mintCard({}), 'land exploration');
+    if (n) text = `Card: ${cardLabel(n)}`;
     else { kind = 'dt'; text = `+${addDT(5)} DT (inventory full)`; }
   }
-  S.player.tiles[i] = kind[0];
+  S.player.tiles[i] = kind === 'card' ? 'n' : kind[0]; // 'n' = card (kept from v1 saves)
   count('tilesExplored');
-  if (kind === 'nft' || kind === 'jackpot') log('SYSTEM', `Exploring sector #${i + 1}: ${text}`);
+  if (kind === 'card' || kind === 'jackpot') log('SYSTEM', `Exploring sector #${i + 1}: ${text}`);
   return Object.assign(ok(text), { kind });
 }
 function actExploreAll(max) {
-  const n = tileCount(), got = { dt: 0, cr: 0, shards: 0, nft: 0, j: 0 };
+  const n = tileCount(), got = { dt: 0, cr: 0, shards: 0, card: 0, j: 0 };
   let done = 0;
   const crBefore = S.player.cr, dtBefore = S.player.dt, shBefore = S.player.shards;
   for (let i = 0; i < n && done < (max || 1e9); i++) {
     if (S.player.tiles[i]) continue;
     const r = actExplore(i);
-    if (r.ok) { done++; if (r.kind === 'nft') got.nft++; if (r.kind === 'jackpot') got.j++; }
+    if (r.ok) { done++; if (r.kind === 'card') got.card++; if (r.kind === 'jackpot') got.j++; }
   }
   if (!done) return fail('Nothing left to explore - buy more land');
   log('SYSTEM', `Explored ${done} sectors.`);
-  return ok(`Explored ${done}: +${fmt(S.player.cr - crBefore)} CR, +${S.player.dt - dtBefore} DT, +${S.player.shards - shBefore} shards${got.nft ? `, ${got.nft} NFT` : ''}${got.j ? `, ${got.j} jackpot` : ''}`);
+  return ok(`Explored ${done}: +${fmt(S.player.cr - crBefore)} CR, +${S.player.dt - dtBefore} DT, +${S.player.shards - shBefore} shards${got.card ? `, ${got.card} card${got.card > 1 ? 's' : ''}` : ''}${got.j ? `, ${got.j} jackpot` : ''}`);
 }

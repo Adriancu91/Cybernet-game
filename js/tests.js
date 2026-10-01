@@ -33,9 +33,18 @@ function runSelfTests(opts) {
     for (const g of S.guilds) assert(g.vault >= 0 && Number.isInteger(g.vault), `${tag}: guild vault invalid ${g.vault}`);
     const nan = []; walkNumbers(S, 'S', nan);
     assert(nan.length === 0, `${tag}: NaN at ${nan.slice(0, 3).join(', ')}`);
-    const ids = S.inv.map(n => n.id).concat(S.market.listings.filter(l => l.nft).map(l => l.nft.id));
-    assert(new Set(ids).size === ids.length, `${tag}: duplicate NFT ids`);
-    assert(S.equipped.length <= CONFIG.NFT.equipSlots, `${tag}: too many equipped`);
+    const ids = S.inv.map(n => n.id).concat(S.market.listings.filter(l => l.card).map(l => l.card.id));
+    assert(new Set(ids).size === ids.length, `${tag}: duplicate card ids`);
+    assert(S.equipped.length <= CONFIG.CARDS.types.length, `${tag}: too many equipped`);
+    const eqTypes = S.equipped.map(id => (S.inv.find(c => c.id === id) || {}).type);
+    assert(new Set(eqTypes).size === eqTypes.length, `${tag}: two cards of the same type equipped`);
+    for (const c of S.inv) {
+      assert(c.plus >= 0 && c.plus <= CONFIG.CARDS.maxPlus, `${tag}: bad plus ${c.plus}`);
+      assert(c.bonus.length === CONFIG.CARDS.rarities[c.rarity].bonus, `${tag}: ${cardName(c)} has ${c.bonus.length} bonus stats`);
+      assert(new Set(c.bonus.map(b => b.type)).size === c.bonus.length, `${tag}: duplicate bonus stat`);
+    }
+    assert(S.player.recal >= 0 && Number.isInteger(S.player.recal), `${tag}: recalibrators invalid`);
+    assert(S.ai.energy >= 0 && S.ai.energy <= CONFIG.AI_LAB.energyWonCap, `${tag}: AI energy ${S.ai.energy}`);
     assert(landUsed() <= p.land, `${tag}: land used ${landUsed()} > owned ${p.land}`);
     assert(petMs() >= CONFIG.PET.speedFloorMs, `${tag}: ms below floor`);
   }
@@ -59,7 +68,7 @@ function runSelfTests(opts) {
     let now = 1e6;
     const N = opts.quick ? 2000 : 10000;
     for (let i = 0; i < N; i++) {
-      const r = randInt(0, 34);
+      const r = randInt(0, 36);
       const inv = S.inv;
       const anyNft = () => inv.length ? pick(inv).id : 'none';
       switch (r) {
@@ -71,24 +80,28 @@ function runSelfTests(opts) {
         case 5: if (S.stands.length && chance(0.1)) actDemolishStand(pick(S.stands).id); break;
         case 6: if (chance(0.3)) { if (actSolo(now).ok) now = playMatchInstant(now, true); } break;
         case 7: if (chance(0.3)) { if (actMulti(now).ok) now = playMatchInstant(now, true); } break;
-        case 8: giveNFT(mintNFT({ level: randInt(1, 3) })); break;
+        case 8: giveCard(mintCard({ plus: randInt(0, 2) })); break;
         case 9: actEquip(anyNft()); break;
         case 10: actUnequip(anyNft()); break;
-        case 11: {
-          const t = pick(CONFIG.NFT.themes).id, l = randInt(1, 2);
-          const ids = [0, 1, 2, 3, 4].map(s => { const n = S.inv.find(x => x.theme === t && x.level === l && x.slot === s && !isEquipped(x.id) && !x.listed && !x.locked); return n ? n.id : null; });
-          if (ids.every(Boolean)) actFuse(ids); else actFuse(inv.slice(0, 5).map(n => n.id));
+        case 11: { const id = anyNft(); if (chance(0.6)) actUpgradeCard(id); else if (chance(0.5)) actEvolveCard(id); else actRerollCard(id); break; }
+        case 12: actSalvage([anyNft()]); break;
+        case 13: actForge(pick(CONFIG.CARDS.types).id); break;
+        case 31: {
+          if (!S.ai.consent) actAIConsent();
+          if (actAIStart(null).ok) {
+            while (!aiAnswer(pick(['', 'nu stiu', 'Plouă foarte tare afară acum', '8', 'albastru', 'bla bla bla bla'])).last);
+            actAIFinish();
+          }
           break;
         }
-        case 12: actSalvage([anyNft()]); break;
-        case 13: actShardBuy(pick(CONFIG.NFT.themes).id, randInt(0, 4)); break;
+        case 32: if (chance(0.3)) S.player.recal += 1; addAIEnergy(1); break;
         case 14: actJoinGuild(pick(S.guilds).id); break;
         case 15: if (chance(0.1)) actLeaveGuild(); break;
         case 16: actDonate(randInt(1, 5000)); break;
         case 17: actUpgradeHQ(); break;
         case 18: actBuyCosmetic(pick(CONFIG.COSMETICS).id); break;
         case 19: { const l = pick(S.market.listings); if (l) actBuyListing(l.id); break; }
-        case 20: actListNFT(anyNft(), randInt(1, 5000), pick(['server', 'stand'])); break;
+        case 20: actListCard(anyNft(), randInt(1, 5000), pick(['server', 'stand'])); break;
         case 21: { const l = playerListings()[0]; if (l) actCancelListing(l.id); break; }
         case 22: actBuildMarketStand(); break;
         case 23: actUpgradeMarketStand(); break;
@@ -104,47 +117,125 @@ function runSelfTests(opts) {
       if (i % 50 === 0) invariants('action ' + i);
     }
     invariants('end');
-    return `${N} actions, ${S.inv.length} NFTs, ${counter('fusions')} fusions`;
+    return `${N} actions, ${S.inv.length} cards, ${counter('upgrades')} upgrades, ${counter('evolves')} evolutions, ${S.ai.rounds} AI lessons`;
   });
 
-  test('Fusion accepts only 5 valid items', () => {
+  test('Cards: upgrade +0..+4, evolve, reroll, one card per type', () => {
     fresh(7);
-    const mk = (slot, level, theme) => giveNFT(mintNFT({ theme: theme || 'quantum', slot, level: level || 1 }));
-    const set = [0, 1, 2, 3, 4].map(s => mk(s));
-    S.player.cr = 1e6;
-    assert(whyFuse(set.slice(0, 4).map(n => n.id)) !== '', '4 items accepted');
-    assert(whyFuse([set[0].id, set[0].id, set[1].id, set[2].id, set[3].id]) !== '', 'duplicate accepted');
-    const wrongSlot = mk(0);
-    assert(whyFuse([wrongSlot.id, set[0].id, set[1].id, set[2].id, set[3].id]) !== '', 'two Cores accepted');
-    const other = mk(4, 1, 'void');
-    assert(whyFuse([set[0].id, set[1].id, set[2].id, set[3].id, other.id]) !== '', 'mixed themes accepted');
-    const l2 = mk(4, 2);
-    assert(whyFuse([set[0].id, set[1].id, set[2].id, set[3].id, l2.id]) !== '', 'mixed levels accepted');
-    actEquip(set[0].id);
-    assert(whyFuse(set.map(n => n.id)) !== '', 'equipped item accepted');
-    actUnequip(set[0].id);
-    assert(actListNFT(set[1].id, 100, 'server').ok, 'list failed');
-    assert(whyFuse(set.map(n => n.id)) !== '', 'listed item accepted');
-    actCancelListing(playerListings()[0].id);
-    const before = S.inv.length;
-    const r = actFuse(set.map(n => n.id));
-    assert(r.ok, 'valid fusion rejected: ' + r.msg);
-    assert(r.nft.level === 2 && r.nft.theme === 'quantum', 'wrong output');
-    assert(S.inv.length === before - 4, 'inventory count wrong');
-    const top = [0, 1, 2, 3, 4].map(s => mk(s, CONFIG.NFT.maxLevel));
-    assert(whyFuse(top.map(n => n.id)) !== '', 'fused past max level');
+    S.player.cr = 1e8; S.player.shards = 1e6;
+    const c = giveCard(mintCard({ type: 'core', rarity: 0 }));
+    assert(c.bonus.length === 1, 'Common should have 1 bonus stat');
+    assert(whyEvolveCard(c.id) !== '', 'evolved below +4');
+    const v0 = cardMainValue(c);
+    for (let i = 0; i < 4; i++) assert(actUpgradeCard(c.id).ok, 'upgrade ' + i + ' failed');
+    assert(c.plus === 4 && cardMainValue(c) > v0, 'upgrade did not raise the main stat');
+    assert(!actUpgradeCard(c.id).ok, 'upgraded past +4');
+    for (let r = 1; r <= CONFIG.CARDS.MAX_CRAFT_RARITY; r++) {
+      assert(actEvolveCard(c.id).ok, 'evolve to ' + r + ' failed');
+      assert(c.rarity === r && c.plus === 0, 'evolve result wrong');
+      assert(c.bonus.length === CONFIG.CARDS.rarities[r].bonus, 'wrong bonus count after evolve: ' + c.bonus.length);
+      while (c.plus < 4) assert(actUpgradeCard(c.id).ok, 'upgrade after evolve');
+    }
+    assert(!actEvolveCard(c.id).ok, 'Legendary evolved (into Unique?)');
+    const u = giveCard(mintCard({ rarity: CONFIG.CARDS.UNIQUE }));
+    assert(u.bonus.length === 5, 'Unique must have 5 bonus stats');
+    while (u.plus < 4) assert(actUpgradeCard(u.id).ok, 'unique upgrade');
+    assert(!actEvolveCard(u.id).ok, 'Unique evolved');
+    // reroll needs a recalibrator and keeps the count of bonus stats
+    S.player.recal = 0;
+    assert(!actRerollCard(c.id).ok, 'reroll without recalibrator');
+    S.player.recal = 1;
+    assert(actRerollCard(c.id).ok && S.player.recal === 0 && c.bonus.length === 4, 'reroll failed');
+    // equip: one per type
+    const c2 = giveCard(mintCard({ type: 'core' }));
+    assert(actEquip(c.id).ok && actEquip(c2.id).ok, 'equip failed');
+    assert(S.equipped.length === 1 && S.equipped[0] === c2.id, 'two Cores equipped');
+    for (const t of ['memory', 'hardware', 'cooler']) actEquip(giveCard(mintCard({ type: t, rarity: 2 })).id);
+    assert(activeSet() && activeSet().rarity === Math.min(c2.rarity, 2), 'set not active / wrong rarity');
+    // equipped / listed / locked cards are protected from salvage
+    assert(!actSalvage([c2.id]).ok, 'salvaged an equipped card');
+    actUnequip(c.id);
+    c.locked = true; assert(!actSalvage([c.id]).ok, 'salvaged a locked card');
+  });
+
+  test('Heat: Core and Hardware overheat without a Cooler', () => {
+    fresh(8);
+    actEquip(giveCard(mintCard({ type: 'core', rarity: 4, plus: 4 })).id);
+    actEquip(giveCard(mintCard({ type: 'hardware', rarity: 4, plus: 4 })).id);
+    const hot = heatInfo();
+    assert(hot.over && hot.mult < 1 && hot.mult >= CONFIG.CARDS.heat.minMult, 'should overheat: ' + JSON.stringify(hot));
+    actEquip(giveCard(mintCard({ type: 'cooler', rarity: 4, plus: 4 })).id);
+    const cool = heatInfo();
+    assert(cool.mult > hot.mult, 'cooler did not help');
+  });
+
+  test('AI Lab: energy, rewards, recalibrator, Unique pity, no personal data', () => {
+    fresh(9);
+    assert(!actAIStart(null).ok, 'started without consent');
+    actAIConsent();
+    S.ai.energy = 0;
+    assert(!actAIStart(null).ok, 'started without energy');
+    simulate(CONFIG.AI_LAB.regenMs + 1000);
+    assert(S.ai.energy === 1, 'energy did not regenerate: ' + S.ai.energy);
+    assert(actAIStart(null).ok, 'start failed');
+    assert(S.ai.energy === 0, 'energy not spent');
+    const recal0 = S.player.recal;
+    while (true) {
+      const q = AILAB.qs[AILAB.i];
+      const txt = q.kind === 'control' ? q.accept[0] : 'Aș spune că este o expresie veche, sună-mă la 0722 123 456 sau scrie la ion@example.com';
+      if (aiAnswer(txt).last) break;
+    }
+    const r = actAIFinish();
+    assert(r.ok && r.useful === CONFIG.AI_LAB.questions - 1, 'useful answers: ' + r.useful);
+    assert(S.player.recal === recal0 + 1, 'no guaranteed recalibrator');
+    const dump = JSON.stringify(S.ai.collected);
+    assert(!/0722|example\.com/.test(dump), 'personal data was stored');
+    // spam answers earn nothing useful and miss the attention check
+    S.ai.energy = 1; actAIStart(null);
+    while (!aiAnswer('bla bla bla bla').last);
+    const r2 = actAIFinish();
+    assert(r2.useful === 0 && !r2.controlOk && r2.cr === 0, 'spam was rewarded');
+    // pity: a Unique is guaranteed after enough lessons
+    S.ai.pity = CONFIG.AI_LAB.uniquePity - 1; S.ai.energy = 1;
+    const u0 = counter('uniqueGot');
+    actAIStart(null);
+    while (true) { const q = AILAB.qs[AILAB.i]; if (aiAnswer(q.kind === 'control' ? q.accept[0] : 'Răspunsul meu complet și sincer aici').last) break; }
+    actAIFinish();
+    assert(counter('uniqueGot') === u0 + 1 && S.ai.pity === 0, 'pity did not give a Unique');
+    assert(addAIEnergy(100) <= CONFIG.AI_LAB.energyWonCap && S.ai.energy === CONFIG.AI_LAB.energyWonCap, 'energy cap broken');
+  });
+
+  test('v1 NFT saves are converted to cards', () => {
+    fresh(10);
+    const old = JSON.parse(serialize(S));
+    old.v = 1;
+    delete old.album; delete old.ai; delete old.player.recal;
+    old.inv = [
+      { id: 'nA', dna: 123, theme: 'quantum', slot: 0, level: 3, rarity: 2, affixes: [{ type: 'cr', value: 9 }, { type: 'dt', value: 5 }, { type: 'comm', value: 3 }], q: 1.1, createdAt: 0, locked: false, listed: null, stars: 0 },
+      { id: 'nB', dna: 456, theme: 'void', slot: 4, level: 1, rarity: 0, affixes: [{ type: 'speed', value: 1 }], q: 0.9, createdAt: 0, locked: true, listed: null, stars: 0 },
+    ];
+    old.equipped = ['nA', 'nB'];
+    old.market.listings = [{ id: 'lx', nft: old.inv[0], price: 10, seller: 'b1', venue: 'server', expires: 1e9 }];
+    const st = migrate(old);
+    S = st;
+    assert(st.inv.length === 2 && st.inv.every(c => c.type && c.bonus), 'not converted');
+    assert(st.inv[0].rarity === 3 && st.inv[0].plus === 2, 'rarity/level mapping wrong');
+    assert(st.inv[1].locked, 'lock lost');
+    assert(st.market.listings.length === 0, 'old listings kept');
+    assert(st.ai && st.album && st.player.recal === 0, 'new fields missing');
+    invariants('migrated');
   });
 
   test('Caps and the 150 ms floor hold at extreme values', () => {
     fresh(9);
     S.player.speedPoints = 1e9;
-    for (let i = 0; i < 10; i++) {
-      const n = giveNFT(mintNFT({ theme: 'quantum', slot: i % 5, level: 10, rarity: 3 }));
-      n.affixes = Object.keys(CONFIG.NFT.affixes).map(t => ({ type: t, value: 1e7 }));
+    for (const t of CONFIG.CARDS.types) {
+      const n = giveCard(mintCard({ type: t.id, rarity: CONFIG.CARDS.UNIQUE, plus: 4 }));
+      n.mainRoll = 1e7; n.bonus.forEach(b => { b.roll = 1e7; });
       actEquip(n.id);
     }
     const b = bonuses();
-    for (const k in CONFIG.NFT.affixes) assert(b.eff[k] <= CONFIG.NFT.affixes[k].cap + 1e-9, `${k} over cap: ${b.eff[k]}`);
+    for (const k in CONFIG.CARDS.stats) assert(b.eff[k] <= CONFIG.CARDS.stats[k].cap + 1e-9, `${k} over cap: ${b.eff[k]}`);
     assert(petMs() === CONFIG.PET.speedFloorMs, 'ms not at floor: ' + petMs());
     assert(capValue(10, 300) < 10 && capValue(10, 300) > 9.8, 'small values should pass almost unchanged');
     assert(answerProb(1e9, 1) <= CONFIG.AI.pMax && answerProb(0, 10) >= CONFIG.AI.pMin, 'answer probability not clamped');
@@ -197,7 +288,7 @@ function runSelfTests(opts) {
   test('Save -> load round-trip is identical', () => {
     fresh(21);
     simulate(3600000);
-    giveNFT(mintNFT({}));
+    giveCard(mintCard({}));
     const a = serialize(S);
     const b = serialize(migrate(deserialize(a)));
     assert(a === b, 'state differs after round-trip');
@@ -219,16 +310,17 @@ function runSelfTests(opts) {
     return hours + 'h simulated';
   });
 
-  test('NFT art is deterministic and unique', () => {
+  test('Card art is deterministic and unique', () => {
     fresh(44);
-    const n = mintNFT({});
+    const n = mintCard({});
     Art.clear();
-    const s1 = Art.nft(n); Art.clear();
-    const s2 = Art.nft(JSON.parse(JSON.stringify(n)));
+    const s1 = Art.card(n); Art.clear();
+    const s2 = Art.card(JSON.parse(JSON.stringify(n)));
     assert(s1 === s2, 'same dna gave different SVG');
     const set = new Set();
-    for (let i = 0; i < 1000; i++) set.add(Art.nft(mintNFT({})));
+    for (let i = 0; i < 1000; i++) set.add(Art.card(mintCard({})));
     assert(set.size === 1000, 'only ' + set.size + ' unique SVGs');
+    for (const t of CONFIG.CARDS.types) for (let r = 0; r < CONFIG.CARDS.rarities.length; r++) assert(Art.card(mintCard({ type: t.id, rarity: r, plus: 4 })).startsWith('<svg'), 'art failed for ' + t.id + r);
   });
 
   test('Economy never produces negative balances when broke', () => {

@@ -4,8 +4,8 @@
    Change a value, reload the page, and the game uses it.
    ============================================================ */
 const CONFIG = {
-  VERSION: '1.0.0',
-  SAVE_VERSION: 1,
+  VERSION: '2.0.0',
+  SAVE_VERSION: 2,
   SAVE_KEY: 'cybernet_save_v1',
 
   // ---------- time ----------
@@ -79,7 +79,7 @@ const CONFIG = {
       { kind: 'dt',     weight: 40, min: 2,  max: 8 },
       { kind: 'cr',     weight: 35, min: 15, max: 90 },
       { kind: 'shards', weight: 17, min: 1,  max: 5 },
-      { kind: 'nft',    weight: 4 },
+      { kind: 'card',   weight: 4 },
       { kind: 'jackpot', weight: 4, min: 200, max: 600 },
     ],
   },
@@ -127,7 +127,7 @@ const CONFIG = {
     winCR: 100,
     winDT: 10,
     failCRPerCorrect: 5,
-    nftDropPerfect: 0.08,
+    cardDropPerfect: 0.08,
   },
 
   // ---------- multiplayer ----------
@@ -139,7 +139,7 @@ const CONFIG = {
     overrides: 2,
     revealMs: 1300,
     K: 40,
-    drop: [0.35, 0.20, 0.10],  // NFT drop chance for place 1..3
+    drop: [0.35, 0.20, 0.10],  // card drop chance for place 1..3
   },
 
   // ---------- random arena loot ----------
@@ -153,7 +153,7 @@ const CONFIG = {
       { kind: 'dt',     weight: 40, min: 5,  max: 15 },
       { kind: 'cr',     weight: 25, min: 30, max: 120 },
       { kind: 'shards', weight: 20, min: 5,  max: 15 },
-      { kind: 'nft',    weight: 12 },
+      { kind: 'card',   weight: 12 },
       { kind: 'stamina', weight: 3 },
     ],
     cache: [
@@ -174,43 +174,70 @@ const CONFIG = {
     msPerRating: 2.0,
   },
 
-  // ---------- NFTs ----------
-  NFT: {
-    themes: [
-      { id: 'quantum', name: 'Quantum Relics', c: ['#39ff88', '#00e5ff'] },
-      { id: 'synapse', name: 'Neon Synapse',   c: ['#ff4fd8', '#7b61ff'] },
-      { id: 'chrome',  name: 'Chrome Circuit', c: ['#ffb020', '#00e5ff'] },
-      { id: 'void',    name: 'Void Lattice',   c: ['#9b7bff', '#39ff88'] },
-      { id: 'solar',   name: 'Solar Daemon',   c: ['#ff7a2f', '#ffe14d'] },
-      { id: 'glitch',  name: 'Glitch Garden',  c: ['#6dff4f', '#ff4f7b'] },
+  // ---------- cards (replaced NFTs in v2) ----------
+  // 4 fair types, each with a fixed main stat; 5 craftable rarities + Unique (AI Lab only)
+  CARDS: {
+    types: [
+      { id: 'core',     name: 'Core',           main: 'speed', c: ['#39ff88', '#00e5ff'], heat: 3 },
+      { id: 'memory',   name: 'Virtual Memory', main: 'train', c: ['#ff4fd8', '#7b61ff'], heat: 1 },
+      { id: 'hardware', name: 'Hardware',       main: 'cr',    c: ['#ffb020', '#ff7a2f'], heat: 3 },
+      { id: 'cooler',   name: 'Cooler',         main: 'dt',    c: ['#6ab8ff', '#bfefff'], cool: 5.5 },
     ],
-    slots: ['Core', 'Lens', 'Spine', 'Crown', 'Key'],
     rarities: [
-      { name: 'Common',    color: '#7b8595', weight: 60, affixes: 1, mult: 1.0, shards: 1 },
-      { name: 'Rare',      color: '#3b82f6', weight: 28, affixes: 2, mult: 1.3, shards: 2 },
-      { name: 'Epic',      color: '#a855f7', weight: 10, affixes: 3, mult: 1.7, shards: 4 },
-      { name: 'Legendary', color: '#f5b400', weight: 2,  affixes: 3, mult: 2.3, shards: 8 },
+      { name: 'Common',    color: '#8b95a5', weight: 55, bonus: 1, mult: 1.0,  shards: 1 },
+      { name: 'Uncommon',  color: '#39d98a', weight: 27, bonus: 1, mult: 1.25, shards: 2 },
+      { name: 'Rare',      color: '#3b82f6', weight: 12, bonus: 2, mult: 1.6,  shards: 4 },
+      { name: 'Epic',      color: '#a855f7', weight: 5,  bonus: 3, mult: 2.1,  shards: 8 },
+      { name: 'Legendary', color: '#f5b400', weight: 1,  bonus: 4, mult: 2.8,  shards: 16 },
+      { name: 'Unique',    color: '#ff4fd8', weight: 0,  bonus: 5, mult: 3.6,  shards: 40 },
     ],
-    affixes: {
+    UNIQUE: 5,                 // rarity index of Unique: never crafted, never evolved into, AI Lab only
+    MAX_CRAFT_RARITY: 4,       // evolving stops at Legendary
+    stats: {
       cr:    { name: 'Tournament CR',   unit: '%', base: 4,   cap: 300, sign: '+' },
       speed: { name: 'Processing time', unit: '%', base: 1.5, cap: 40,  sign: '-' },
       train: { name: 'Training gain',   unit: '%', base: 5,   cap: 300, sign: '+' },
       dt:    { name: 'DT trickle',      unit: '%', base: 5,   cap: 200, sign: '+' },
       comm:  { name: 'Commission',      unit: '%', base: 3,   cap: 100, sign: '+' },
     },
-    levelGrowth: 1.8,
+    mainFactor: 2.5,           // fixed main stat = base x mainFactor x rarity mult x (1 + plusGrowth x plus) x roll
+    plusGrowth: 0.25,
+    bonusPlusGrowth: 0.10,     // random bonus stats grow 10% per +
+    maxPlus: 4,
     rollMin: 0.7,
     rollMax: 1.3,
-    maxLevel: 10,
-    equipSlots: 10,
+    upgrade: { cr: 150, crGrowth: 1.8, shards: 6, shardGrowth: 1.55 },     // cost of +p -> +p+1 = base x growth^rarity x (p+1)
+    evolve: [                  // cost to evolve a +4 card to the next rarity
+      { cr: 1500,   shards: 40 },
+      { cr: 6000,   shards: 100 },
+      { cr: 25000,  shards: 250 },
+      { cr: 100000, shards: 600 },
+    ],
+    heat: { rarityGrowth: 0.5, plusGrowth: 0.15, baseCooling: 3, coolRarityGrowth: 0.6, coolPlusGrowth: 0.2, minMult: 0.5 },
+    setBonus: [5, 8, 12, 18, 25, 35],   // % boost to all card stats with all 4 types equipped, by the lowest equipped rarity
     inventoryMax: 200,
-    fusionFeeBase: 200,
-    fusionFeeGrowth: 3,
-    fusionMissingWeight: 3,
-    fusionPity: 2,
     shardBase: 5,
-    shardBuyCost: 60,
-    ascensionFee: 1000000,
+    forgeCost: 60,             // shards for a Common card of the type you choose
+    album: { entryShards: 5, columnShards: [20, 40, 80, 160, 320, 640], columnRecal: 1 },
+  },
+
+  // ---------- AI Lab (training rounds with the real AI) ----------
+  AI_LAB: {
+    energyMax: 3,
+    regenMs: 3600000,          // +1 energy per hour (stacks to 3)
+    energyWonCap: 6,           // energy won in quiz matches can stack higher
+    questions: 5,
+    winEnergySolo: 1,          // energy won from a Solo win
+    winEnergyMulti: 1,         // energy won from a Multiplayer top-3
+    crPerUseful: 40,           // x league reward
+    shardsPerUseful: 3,
+    cardChance: 0.35,
+    uniqueChance: 0.005,
+    uniquePity: 100,           // guaranteed Unique after this many rounds without one
+    minWords: 2,
+    collectedMax: 2000,
+    milestoneEvery: 25,        // every 25 useful answers -> milestone reward
+    milestoneShards: 50,
   },
 
   // ---------- guilds ----------

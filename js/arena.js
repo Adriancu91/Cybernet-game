@@ -144,11 +144,11 @@ function rollLoot(table, league, source) {
   else if (e.kind === 'stamina') {
     if (S.player.stamina < CONFIG.SOLO.staminaMax) { S.player.stamina++; text = '+1 stamina'; }
     else { const n = addDT(10); text = `+${n} DT`; }
-  } else if (e.kind === 'nft') {
-    const n = giveNFT(mintNFT(S.player.league >= 3 && chance(0.15) ? { level: 2 } : {}), source.toLowerCase());
+  } else if (e.kind === 'card') {
+    const n = giveCard(mintCard(S.player.league >= 3 && chance(0.15) ? { plus: 1 } : {}), source.toLowerCase());
     if (!n) return null;
-    text = `NFT: ${nftName(n)} L${n.level} (${CONFIG.NFT.rarities[n.rarity].name})`;
-    return { kind: 'nft', text, nft: n, source };
+    text = `Card: ${cardLabel(n)}`;
+    return { kind: 'card', text, card: n, source };
   }
   count('lootDrops');
   log('ARENA', `${source}: ${text}`);
@@ -222,7 +222,7 @@ function arenaUpdate(now) {
 function finishMatch(m) {
   m.phase = 'done';
   const me = m.parts[0], L = CONFIG.LEAGUES[m.league];
-  const res = { type: m.type, correct: me.correct, rounds: m.round, cr: 0, dt: 0, nft: null, bonus: 0, tax: 0 };
+  const res = { type: m.type, correct: me.correct, rounds: m.round, cr: 0, dt: 0, card: null, bonus: 0, tax: 0, energy: 0 };
   if (m.type === 'solo') {
     const win = m.lives > 0 && m.round >= m.rounds;
     res.win = win;
@@ -232,7 +232,8 @@ function finishMatch(m) {
       res.cr = addCR(base + res.bonus, 'solo');
       res.dt = addDT(CONFIG.SOLO.winDT);
       count('soloWins'); missionProgress('solo_win', 1);
-      if (me.correct === m.rounds) { count('soloPerfect'); res.nft = rollDrop(CONFIG.SOLO.nftDropPerfect, 'perfect solo run'); }
+      res.energy = addAIEnergy(CONFIG.AI_LAB.winEnergySolo);
+      if (me.correct === m.rounds) { count('soloPerfect'); res.card = rollDrop(CONFIG.SOLO.cardDropPerfect, 'perfect solo run'); }
     } else {
       res.cr = addCR(me.correct * CONFIG.SOLO.failCRPerCorrect, 'solo');
     }
@@ -273,7 +274,8 @@ function finishMatch(m) {
     if (place <= 3) {
       res.dt = addDT(dts[place - 1]);
       missionProgress('multi_top3', 1);
-      res.nft = rollDrop(CONFIG.MULTI.drop[place - 1], `Multiplayer #${place}`);
+      res.energy = addAIEnergy(CONFIG.AI_LAB.winEnergyMulti);
+      res.card = rollDrop(CONFIG.MULTI.drop[place - 1], `Multiplayer #${place}`);
     }
     if (place === 1) count('multiWins');
     log('ARENA', `Multiplayer finished #${place}/${m.parts.length}: ${me.correct}/${m.rounds} correct, +${fmt(res.cr)} CR, rating ${old} -> ${S.player.rating} (${delta >= 0 ? '+' : ''}${delta}).`);

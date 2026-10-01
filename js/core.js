@@ -74,7 +74,10 @@ function newState(seed) {
       legacy: 0, rebirths: 0, ascensions: 0,
       cosmetics: { owned: ['theme_classic', 'font_default', 'badge_none'], theme: 'theme_classic', font: 'font_default', badge: 'badge_none' },
       titles: [], title: '',
+      recal: 0,                // Neural Recalibrators: reroll a card's bonus stats
     },
+    album: {},                 // 'type:rarity' -> first time obtained
+    ai: { energy: 1, acc: 0, pity: 0, rounds: 0, useful: 0, milestone: 0, consent: false, collected: [] },
     stands: [],
     econ: { upkeepAcc: 0, debt: 0, offline: false, minted: 0, burned: 0, hour: { start: 0, minted: 0, burned: 0 }, lastHour: { minted: 0, burned: 0 } },
     server: { total: CONFIG.SERVER.startTotal, botLand: 0, state: 'NORMAL', freezeUntil: 0, expansions: 0, history: [], botBuyAcc: 0, alarmSeen: true },
@@ -168,7 +171,9 @@ function migrate(data) {
       else if (def[k] && typeof def[k] === 'object' && !Array.isArray(def[k]) && target[k] && typeof target[k] === 'object') fill(target[k], def[k]);
     }
   }
+  const oldV = data.v || 1;
   fill(data, fresh);
+  if (oldV < 2 && typeof migrateNftSave === 'function') migrateNftSave(data);
   if (data.bots.length === 0) data.bots = fresh.bots;
   if (data.guilds.length === 0) data.guilds = fresh.guilds;
   data.v = CONFIG.SAVE_VERSION;

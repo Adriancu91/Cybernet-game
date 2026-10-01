@@ -7,7 +7,7 @@
 
   function snapshot() {
     const g = playerGuild();
-    return { cr: S.player.cr, dt: S.player.dt, sold: counter('nftSold'), comm: S.market.standEarned, exp: S.server.expansions, vault: g ? g.vault : null };
+    return { cr: S.player.cr, dt: S.player.dt, sold: counter('cardSold') + counter('nftSold'), comm: S.market.standEarned, exp: S.server.expansions, vault: g ? g.vault : null };
   }
   function catchUp(ms, showSummary) {
     ms = Math.min(ms, CONFIG.OFFLINE_CAP_HOURS * CONFIG.HOUR);
@@ -22,6 +22,8 @@
   }
 
   function boot() {
+    if (typeof AI_BRIDGE !== 'undefined') AI_BRIDGE.init();
+    if (typeof LiveQuiz !== 'undefined') LiveQuiz.load();
     const loaded = loadGame();
     let isNew = false;
     if (loaded) { S = loaded; }
@@ -42,6 +44,8 @@
     if (/[?&]debug=1/.test(location.search)) openDebug();
     requestAnimationFrame(frame);
     setInterval(tick, 250);
+    // fresh quiz questions from Wikidata once a day (silently keeps the local bank if offline)
+    if (typeof LiveQuiz !== 'undefined') { LiveQuiz.refresh(); setInterval(() => LiveQuiz.refresh(), 3600000); }
   }
 
   // simulation: fixed 1 s steps, driven by real time x debug speed

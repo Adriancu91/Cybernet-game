@@ -1,4 +1,4 @@
-# CyberNet: AI Academy — Alliances & Collectibles
+# CyberNet: AI Academy — Cards, AI Lab & Alliances
 
 A single-player browser strategy & trading game with a cyberpunk terminal look. Every other "player" is a simulated bot: they train, compete in the arena, trade NFTs, buy land and run guilds.
 
@@ -12,9 +12,11 @@ A single-player browser strategy & trading game with a cyberpunk terminal look. 
 | Training stands | x2 → x10 on your own land, max 3, hourly upkeep, higher tiers gated by league. |
 | Arena | Solo (10 rounds, 3 lives, stamina) and Multiplayer (5–9 bots near your rating, live rounds, pool split by score). 2 Human Overrides per match. |
 | Leagues | Bronze → Silver → Gold → Platinum → Diamond → Neural. Harder questions, stronger bots, higher rewards. |
-| NFTs | 6 themes × 5 slots, 4 rarities, 5 affix types. Every NFT is drawn procedurally from its own DNA. 10 equip slots, set bonuses, global caps, fusion up to level 10, shards for bad luck. |
+| Cards | 4 fair types (Core, Virtual Memory, Hardware, Cooler), each with a fixed main stat. Rarities Common → Uncommon → Rare → Epic → Legendary, plus **Unique** (AI Lab only). Upgrade +0 → +4 with CR & shards, then evolve to the next rarity. 1–4 random bonus stats by rarity (Unique: 5), rerollable with a Neural Recalibrator. One card per type equipped; full rig = set bonus; Core & Hardware make heat, a Cooler removes it. Card album with rewards. Every card is drawn procedurally from its own DNA. |
+| AI Lab | The AI asks questions in Romanian, the player answers in their own words. Energy +1/h (max 3), more from quiz wins. Every lesson: 1 Recalibrator guaranteed, CR & shards for useful answers, 35% card chance, Unique chance with a pity timer. Offline it uses a local bank and saves answers for export; `js/ai_bridge.js` + `docs/AI_BRIDGE.md` describe how to plug in the real AI. |
+| Live quiz | Fresh trivia every day generated from Wikidata (capitals, chemical elements), cached 24 h, mixed with the built-in bank; falls back to the local bank when offline. |
 | Guilds | 10% tax minted as a bonus, Guild HQ (5 levels), cosmetics (themes, fonts, badges). |
-| Market | Server market + your own Marketplace Stand with 2% commission on routed trades. |
+| Market | Card market + your own Marketplace Stand with 2% commission on routed trades. |
 | Global server | Land price rises with scarcity; below 50% free space heavy building freezes for 60 s, then capacity grows +50%. |
 | Long term | 14-day seasons, daily missions, weekly events, 40 achievements, leaderboards, Neural Rebirth prestige. |
 
@@ -30,7 +32,10 @@ js/core.js        seeded RNG, state, currencies, log, save/load
 js/data.js        trivia bank (178 questions), names
 js/questions.js   math generator + trivia picker
 js/sim.js         world, pet, bonuses & caps, stands, land, server, simulation step
-js/nft.js         minting, drops, fusion, shards
+js/cards.js       cards: minting, stats, upgrade, evolve, reroll, heat, album, v1 NFT save migration
+js/livequiz.js    daily trivia from Wikidata
+js/ai_bridge.js   connection point for the real AI (offline by default)
+js/ailab.js       AI Lab lessons, rewards, local question bank, privacy filter
 js/guild.js       guild simulation, HQ, cosmetics
 js/market.js      bot market, player listings, marketplace stand
 js/meta.js        missions, achievements, seasons, prestige, leaderboards

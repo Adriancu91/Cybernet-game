@@ -6,11 +6,11 @@
 function standActive() { return !!(S.market.stand && !S.econ.offline); }
 function standShare() { return standActive() ? CONFIG.MARKET.standLevels[S.market.stand.level].share : 0; }
 
-function recordTrade(n, price) {
+function recordTrade(c, price) {
   const h = S.market.history;
-  if (!h[n.theme]) h[n.theme] = [];
-  h[n.theme].push({ t: S.time, p: price, l: n.level, r: n.rarity });
-  if (h[n.theme].length > CONFIG.MARKET.historyMax) h[n.theme].shift();
+  if (!h[c.type]) h[c.type] = [];
+  h[c.type].push({ t: S.time, p: price, pl: c.plus, r: c.rarity });
+  if (h[c.type].length > CONFIG.MARKET.historyMax) h[c.type].shift();
 }
 function standCommission(price, desc) {
   const c = Math.floor(price * CONFIG.MARKET.standFee * (1 + bonuses().eff.comm / 100));
@@ -23,20 +23,17 @@ function standCommission(price, desc) {
   return c;
 }
 
-function randomMarketLevel() {
-  const l = weightedIndex([60, 25, 10, 4, 1]) + 1;
-  return l;
-}
-function botListNFT() {
-  const n = mintNFT({ level: randomMarketLevel() });
+function randomMarketPlus() { return weightedIndex([60, 25, 10, 4, 1]); }
+function botListCard() {
+  const n = mintCard({ plus: randomMarketPlus() });
   const f = fairValue(n);
   const price = Math.max(5, Math.round(f * randRange(1 - CONFIG.MARKET.botListSpread, 1 + CONFIG.MARKET.botListSpread)));
   const seller = pick(S.bots);
   const venue = standActive() && chance(standShare()) ? 'stand' : 'server';
-  S.market.listings.push({ id: newId('l'), nft: n, price, seller: seller.id, venue, expires: S.time + CONFIG.MARKET.listingTtlMs * randRange(0.3, 1) });
+  S.market.listings.push({ id: newId('l'), card: n, price, seller: seller.id, venue, expires: S.time + CONFIG.MARKET.listingTtlMs * randRange(0.3, 1) });
 }
 function playerListings() { return S.market.listings.filter(l => l.seller === 'player'); }
-function listingNFT(l) { return l.seller === 'player' ? S.inv.find(n => n.id === l.nftId) : l.nft; }
+function listingCard(l) { return l.seller === 'player' ? S.inv.find(n => n.id === l.cardId) : l.card; }
 
 function marketMinute(ms) {
   const M = CONFIG.MARKET, mk = S.market;
@@ -46,23 +43,23 @@ function marketMinute(ms) {
     if (S.time < l.expires) continue;
     mk.listings = mk.listings.filter(x => x !== l);
     if (l.seller === 'player') {
-      const n = S.inv.find(x => x.id === l.nftId);
+      const n = S.inv.find(x => x.id === l.cardId);
       if (n) n.listed = null;
-      log('TRADE', `Your listing expired: ${n ? nftName(n) : 'item'} returned to inventory.`);
+      log('TRADE', `Your listing expired: ${n ? cardLabel(n) : 'item'} returned to inventory.`);
     }
   }
   // bots list new items
   let botCount = mk.listings.filter(l => l.seller !== 'player').length;
-  for (let i = 0; i < 3 && botCount < M.botListingsTarget; i++) { botListNFT(); botCount++; }
+  for (let i = 0; i < 3 && botCount < M.botListingsTarget; i++) { botListCard(); botCount++; }
   // bots buy listed bot items
   for (const l of mk.listings.slice()) {
     if (l.seller === 'player') continue;
-    const ratio = l.price / fairValue(l.nft);
+    const ratio = l.price / fairValue(l.card);
     const p = ratio <= 0.9 ? 0.05 : ratio <= 1 ? 0.02 : ratio <= 1.15 ? 0.008 : 0.002;
     if (chance(p)) {
       mk.listings = mk.listings.filter(x => x !== l);
-      recordTrade(l.nft, l.price);
-      if (l.venue === 'stand' && standActive()) standCommission(l.price, 'bot sale of ' + nftName(l.nft));
+      recordTrade(l.card, l.price);
+      if (l.venue === 'stand' && standActive()) standCommission(l.price, 'bot sale of ' + cardLabel(l.card));
     }
   }
   // bot-to-bot trades happening across the net
@@ -70,15 +67,15 @@ function marketMinute(ms) {
   mk.botTradeAcc += M.botTradesPerHour * boom * hourFrac;
   while (mk.botTradeAcc >= 1) {
     mk.botTradeAcc -= 1;
-    const theme = pick(CONFIG.NFT.themes).id, level = randomMarketLevel(), rarity = rollRarity(0);
-    const fake = { theme, level, rarity, q: randRange(0.8, 1.2) };
+    const type = pick(CONFIG.CARDS.types).id, plus = randomMarketPlus(), rarity = rollCardRarity();
+    const fake = { type, plus, rarity, q: randRange(0.8, 1.2) };
     const price = Math.round(fairValue(fake) * randRange(0.8, 1.2));
     recordTrade(fake, price);
-    if (standActive() && chance(standShare())) standCommission(price, `bot trade ${themeById(theme).name} L${level}`);
+    if (standActive() && chance(standShare())) standCommission(price, `bot trade ${rarityOf(rarity).name} ${cardType(type).name}${plus ? ' +' + plus : ''}`);
   }
   // player listings may sell
   for (const l of playerListings()) {
-    const n = S.inv.find(x => x.id === l.nftId);
+    const n = S.inv.find(x => x.id === l.cardId);
     if (!n) { mk.listings = mk.listings.filter(x => x !== l); continue; }
     const ratio = l.price / fairValue(n);
     const f = ratio <= 0.8 ? 2 : ratio <= 1 ? 1 : ratio <= 1.2 ? 0.4 : ratio <= 1.5 ? 0.1 : 0.01;
@@ -89,11 +86,11 @@ function marketMinute(ms) {
       S.equipped = S.equipped.filter(id => id !== n.id);
       recordTrade(n, l.price);
       addCR(l.price - fee, 'sales');
-      count('nftSold');
-      log('TRADE', `SOLD ${nftName(n)} L${n.level} to ${pick(S.bots).name} for ${fmt(l.price)} CR (fee ${fmt(fee)}).`);
+      count('cardSold');
+      log('TRADE', `SOLD ${cardLabel(n)} to ${pick(S.bots).name} for ${fmt(l.price)} CR (fee ${fmt(fee)}).`);
     }
   }
-  // theme demand drifts
+  // type demand drifts
   for (const t in mk.demand) mk.demand[t] = clamp(mk.demand[t] * Math.exp(randRange(-0.01, 0.01)), 0.7, 1.4);
 }
 function marketStep(dtMs) {
@@ -113,8 +110,8 @@ function whyBuyListing(lid) {
 function listingFee(price) { return Math.max(1, Math.ceil(price * CONFIG.MARKET.listingFee)); }
 function whyList(nid, price, venue) {
   const n = S.inv.find(x => x.id === nid);
-  if (!n) return 'Select an NFT';
-  const r = nftStatusReason(n);
+  if (!n) return 'Select a card';
+  const r = cardStatusReason(n);
   if (r) return r;
   if (!(Number.isInteger(price) && price >= 1)) return 'Enter a whole price of at least 1 CR';
   if (price > 1e12) return 'Price too high';

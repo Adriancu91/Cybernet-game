@@ -38,8 +38,8 @@ function initWorld() {
     S.guilds.push(g);
   }
   S.market.demand = {};
-  for (const t of CONFIG.NFT.themes) S.market.demand[t.id] = randRange(0.85, 1.15);
-  for (let i = 0; i < CONFIG.MARKET.botListingsTarget; i++) botListNFT();
+  for (const t of CONFIG.CARDS.types) S.market.demand[t.id] = randRange(0.85, 1.15);
+  for (let i = 0; i < CONFIG.MARKET.botListingsTarget; i++) botListCard();
   S.server.history.push({ t: 0, total: S.server.total, used: usedSpace() });
   if (typeof ensureMissions === 'function') ensureMissions();
 }
@@ -71,55 +71,53 @@ function updatePlayerLeague() {
 const WEEKLY_EVENTS = [
   { id: 'train_frenzy', name: 'Training Frenzy', desc: '+25% training gain for everyone' },
   { id: 'math_week', name: 'Math Week', desc: 'Arena questions are math only' },
-  { id: 'double_drops', name: 'Double Drops', desc: 'NFT drop chances x2, half of drops use the featured theme' },
+  { id: 'double_drops', name: 'Double Drops', desc: 'Card drop chances x2, half of drops are the featured type' },
   { id: 'trivia_week', name: 'Trivia Week', desc: 'Arena questions are trivia only' },
   { id: 'market_boom', name: 'Market Boom', desc: 'Bot trading volume x1.5' },
 ];
 function currentEvent() {
   const week = Math.floor(S.time / (7 * CONFIG.DAY));
   const ev = WEEKLY_EVENTS[(week + (S.seed >>> 0)) % WEEKLY_EVENTS.length];
-  const theme = CONFIG.NFT.themes[(week + 3) % CONFIG.NFT.themes.length];
-  return Object.assign({ week: week, theme: theme, endsIn: (week + 1) * 7 * CONFIG.DAY - S.time }, ev);
+  const featured = CONFIG.CARDS.types[(week + 3) % CONFIG.CARDS.types.length];
+  return Object.assign({ week: week, featured: featured, endsIn: (week + 1) * 7 * CONFIG.DAY - S.time }, ev);
 }
 function questionMode() {
   const e = currentEvent().id;
   return e === 'math_week' ? 'math' : e === 'trivia_week' ? 'trivia' : 'mixed';
 }
 
-// ---------- bonuses (NFTs -> raw -> capped effective) ----------
+// ---------- bonuses (cards -> raw -> heat & set -> capped effective) ----------
 function capValue(raw, cap) { return raw <= 0 ? 0 : cap * (1 - Math.exp(-raw / cap)); }
-function equippedItems() { return S.equipped.map(id => S.inv.find(n => n.id === id)).filter(n => n && !n.listed); }
-function activeSets() {
+function equippedItems() { return S.equipped.map(id => S.inv.find(c => c.id === id)).filter(c => c && !c.listed); }
+// full set = one card of each of the 4 types equipped; strength set by the lowest rarity
+function activeSet() {
   const items = equippedItems();
-  const groups = {};
-  for (const n of items) { const k = n.theme + ':' + n.level; (groups[k] = groups[k] || []).push(n); }
-  const sets = [];
-  for (const k in groups) {
-    const bySlot = {};
-    for (const n of groups[k]) if (!(n.slot in bySlot)) bySlot[n.slot] = n;
-    if (Object.keys(bySlot).length === 5) {
-      const lvl = groups[k][0].level;
-      sets.push({ theme: groups[k][0].theme, level: lvl, mult: Math.pow(2, lvl), ids: Object.values(bySlot).map(n => n.id) });
-    }
-  }
-  return sets;
+  const byType = {};
+  for (const c of items) byType[c.type] = c;
+  if (!CONFIG.CARDS.types.every(t => byType[t.id])) return null;
+  const minR = Math.min(...CONFIG.CARDS.types.map(t => byType[t.id].rarity));
+  return { rarity: minR, pct: CONFIG.CARDS.setBonus[minR] };
+}
+function heatInfo() {
+  const items = equippedItems(), H = CONFIG.CARDS.heat;
+  const heat = items.reduce((s, c) => s + cardHeat(c), 0);
+  const cooling = H.baseCooling + items.reduce((s, c) => s + cardCooling(c), 0);
+  const mult = heat <= cooling ? 1 : Math.max(H.minMult, cooling / heat);
+  return { heat: Math.round(heat * 10) / 10, cooling: Math.round(cooling * 10) / 10, mult, over: heat > cooling };
 }
 function bonuses() {
-  const raw = { cr: 0, speed: 0, train: 0, dt: 0, comm: 0 };
-  const sets = activeSets();
-  const multOf = {};
-  for (const s of sets) for (const id of s.ids) multOf[id] = s.mult;
-  for (const n of equippedItems()) {
-    const m = multOf[n.id] || 1;
-    for (const a of n.affixes) raw[a.type] += a.value * m;
-  }
+  const raw = {};
+  for (const k in CONFIG.CARDS.stats) raw[k] = 0;
+  const set = activeSet(), hi = heatInfo();
+  const mult = (set ? 1 + set.pct / 100 : 1) * hi.mult;
+  for (const c of equippedItems()) for (const st of cardStats(c)) raw[st.type] += st.value * mult;
   const eff = {}, capped = {};
   for (const k in raw) {
-    const cap = CONFIG.NFT.affixes[k].cap;
+    const cap = CONFIG.CARDS.stats[k].cap;
     eff[k] = capValue(raw[k], cap);
     capped[k] = raw[k] > cap * 0.5;
   }
-  return { raw, eff, capped, sets };
+  return { raw, eff, capped, set, heat: hi };
 }
 function legacyBonus() { return Math.min(CONFIG.PRESTIGE.legacyCap, S.player.legacy * CONFIG.PRESTIGE.legacyPerPoint); }
 function guildPerk() { const g = playerGuild(); return g && g.hq > 0 ? CONFIG.GUILD.hq[g.hq - 1].perk : 0; }
@@ -243,6 +241,13 @@ function step(dtMs) {
     p.staminaAcc += dtMs;
     if (p.staminaAcc >= CONFIG.SOLO.staminaRegenMs) { p.stamina++; p.staminaAcc -= CONFIG.SOLO.staminaRegenMs; }
   } else p.staminaAcc = 0;
+
+  // AI Lab energy: +1 per hour, stacks to the max
+  const ai = S.ai;
+  if (ai.energy < CONFIG.AI_LAB.energyMax) {
+    ai.acc += dtMs;
+    if (ai.acc >= CONFIG.AI_LAB.regenMs) { ai.energy++; ai.acc -= CONFIG.AI_LAB.regenMs; }
+  } else ai.acc = 0;
 
   // upkeep
   const e = S.econ;

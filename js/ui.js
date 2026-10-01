@@ -6,9 +6,9 @@
    ============================================================ */
 
 const UI = {
-  view: 'left', centerTab: 'arena', rightTab: 'nfts', marketTab: 'browse', lbKind: 'rating',
-  standSel: undefined, inputs: {}, nftFilter: { theme: 'all', level: 'all', rarity: 'all', sort: 'level' },
-  mkFilter: { theme: 'all', level: 'all', sort: 'deal' }, chartTheme: 'quantum',
+  view: 'left', centerTab: 'arena', rightTab: 'cards', marketTab: 'browse', lbKind: 'rating',
+  standSel: undefined, inputs: {}, nftFilter: { type: 'all', rarity: 'all', plus: 'all', sort: 'rarity' },
+  mkFilter: { type: 'all', rarity: 'all', sort: 'deal' }, chartType: 'core', aiBusy: false,
   selectMode: false, selected: [], logFilter: { TRADE: true, GUILD: true, SERVER: true, ARENA: true, SYSTEM: true },
   petState: 'idle', petTimer: null, lastHtml: {}, critDismissed: false, speed: 1, lastResult: null,
   confirmCb: null, debug: false, lastAnswerFlash: {},
@@ -29,13 +29,14 @@ function btn(label, act, args, reason, cls) {
 }
 function cd(endGameMs, prefix) { return `<span data-cd="${Math.round(endGameMs)}" data-cdp="${esc(prefix || '')}">${esc(prefix || '')}${fmtTime(endGameMs - S.time)}</span>`; }
 function leagueName(i) { return CONFIG.LEAGUES[i].name; }
-function rarityName(r) { return CONFIG.NFT.rarities[r].name; }
-function rarityColor(r) { return CONFIG.NFT.rarities[r].color; }
+function rarityName(r) { return CONFIG.CARDS.rarities[r].name; }
+function rarityColor(r) { return r === CONFIG.CARDS.UNIQUE ? '#ffe14d' : CONFIG.CARDS.rarities[r].color; }
 function gameClock(t) {
   const d = Math.floor(t / CONFIG.DAY) + 1, h = Math.floor((t % CONFIG.DAY) / CONFIG.HOUR), m = Math.floor((t % CONFIG.HOUR) / 60000);
   return `D${d} ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
-function affixText(a) { const A = CONFIG.NFT.affixes[a.type]; return `${A.sign}${a.value}${A.unit} ${A.name}`; }
+function affixText(a) { return statText(a); }
+function cardCostText(k) { return `${fmt(k.cr)} CR · ${k.shards} shards`; }
 
 // ---------- toasts ----------
 function toast(msg, kind) {
@@ -141,7 +142,7 @@ function htmlLeft() {
   <div class="tiny dim">Soft cap in ${leagueName(p.league)}: <b>${fmt(cap)}</b> — reach higher leagues to raise it.</div>
   ${stat('math', 'Math IQ', 'math', p.math, fmt(p.math), capBar(p.math))}
   ${stat('trivia', 'Trivia DB', 'trivia', p.trivia, fmt(p.trivia), capBar(p.trivia))}
-  ${stat('speed', 'Processing', 'speed', p.speedPoints, `${ms} ms`, speedBar + `<div class="tiny dim">base ${Math.round(msBase)} ms · floor ${CONFIG.PET.speedFloorMs} ms${b.eff.speed > 0 ? ` · NFTs −${b.eff.speed.toFixed(1)}%` : ''}</div>`)}
+  ${stat('speed', 'Processing', 'speed', p.speedPoints, `${ms} ms`, speedBar + `<div class="tiny dim">base ${Math.round(msBase)} ms · floor ${CONFIG.PET.speedFloorMs} ms${b.eff.speed > 0 ? ` · cards −${b.eff.speed.toFixed(1)}%` : ''}</div>`)}
   <h4 style="margin-top:10px">Train on</h4><div class="row">${chips}</div>
   <div class="sep"></div>
   <div class="row between"><span>${ic('dt')} <b class="dtc">${p.dt}</b><span class="dim">/${CONFIG.DT.stockCap} DT</span></span><span class="small dim">${nextDT}</span></div>
@@ -163,11 +164,12 @@ function htmlLeft() {
 // CENTER — tabs
 // ============================================================
 function htmlCenter() {
-  const tabs = [['arena', 'Arena', 'arena'], ['market', 'Market', 'market'], ['land', 'Land', 'land'], ['season', 'Season', 'season']];
+  const tabs = [['arena', 'Arena', 'arena'], ['ai', 'AI Lab', 'ai'], ['market', 'Market', 'market'], ['land', 'Land', 'land'], ['season', 'Season', 'season']];
   const unclaimed = S.missions.list.filter(m => m.progress >= m.target && !m.claimed).length;
-  const t = tabs.map(([id, label, icn]) => `<button class="tab ${UI.centerTab === id ? 'on' : ''}" data-act="centerTab" data-args='"${id}"'>${ic(icn)} ${label}${id === 'season' && unclaimed ? ` <span class="badge-n">${unclaimed}</span>` : ''}${id === 'arena' && arenaBusy() ? ' <span class="dot blink" style="width:7px;height:7px"></span>' : ''}</button>`).join('');
+  const t = tabs.map(([id, label, icn]) => `<button class="tab ${UI.centerTab === id ? 'on' : ''}" data-act="centerTab" data-args='"${id}"'>${ic(icn)} ${label}${id === 'season' && unclaimed ? ` <span class="badge-n">${unclaimed}</span>` : ''}${id === 'arena' && arenaBusy() ? ' <span class="dot blink" style="width:7px;height:7px"></span>' : ''}${id === 'ai' && S.ai.energy > 0 ? ` <span class="badge-n">${S.ai.energy}</span>` : ''}</button>`).join('');
   let body = '';
   if (UI.centerTab === 'arena') body = htmlArena();
+  else if (UI.centerTab === 'ai') body = htmlAILab();
   else if (UI.centerTab === 'market') body = htmlMarket();
   else if (UI.centerTab === 'land') body = htmlLand();
   else body = htmlSeason();
@@ -188,17 +190,17 @@ function htmlArena() {
   return `<div class="card league-card"><div class="league-emblem" style="color:${L.color};border-color:${L.color}">${L.name[0]}</div>
     <div class="grow"><div class="row between"><b style="color:${L.color}">${L.name.toUpperCase()} LEAGUE</b><span>Rating <b>${p.rating}</b></span></div>
     ${nx ? `<div class="xp" style="margin:6px 0"><i style="width:${(prog * 100).toFixed(0)}%"></i></div><div class="tiny dim">${nx.min - p.rating > 0 ? nx.min - p.rating : 0} rating to ${nx.name} · questions difficulty ${L.diff[0]}-${L.diff[1]} · ${L.roundMs / 1000}s rounds</div>` : '<div class="tiny good">Top league reached — Neural Rebirth available in Season tab.</div>'}</div></div>
-  <div class="card" style="margin-top:10px"><div class="row between"><b class="warn">EVENT: ${ev.name}</b><span class="tiny dim">ends in ${cd(S.time + ev.endsIn)}</span></div><div class="small dim">${ev.desc}${ev.id === 'double_drops' ? ' — featured: ' + ev.theme.name : ''}</div></div>
+  <div class="card" style="margin-top:10px"><div class="row between"><b class="warn">EVENT: ${ev.name}</b><span class="tiny dim">ends in ${cd(S.time + ev.endsIn)}</span></div><div class="small dim">${ev.desc}${ev.id === 'double_drops' ? ' — featured: ' + ev.featured.name : ''}</div></div>
   <div class="cards" style="margin-top:10px">
     <div class="card"><h3>Solo Arena</h3><div class="small dim">Your AI alone vs the clock. ${CONFIG.SOLO.rounds} rounds, ${CONFIG.SOLO.lives} lives. Wrong or timeout = −1 life.</div>
-      <div class="kv" style="margin:8px 0"><span>Win reward</span><b class="cr">${fmt(CONFIG.SOLO.winCR * L.reward * crMultiplier())} CR + ${CONFIG.SOLO.winDT} DT</b><span>Fail</span><b>${CONFIG.SOLO.failCRPerCorrect} CR / correct</b><span>Perfect 10/10</span><b>${Math.round(dropChance(CONFIG.SOLO.nftDropPerfect) * 100)}% NFT drop</b><span>Stamina</span><span class="stamina">${stam} <span class="tiny dim">${regen}</span></span></div>
+      <div class="kv" style="margin:8px 0"><span>Win reward</span><b class="cr">${fmt(CONFIG.SOLO.winCR * L.reward * crMultiplier())} CR + ${CONFIG.SOLO.winDT} DT</b><span>Fail</span><b>${CONFIG.SOLO.failCRPerCorrect} CR / correct</b><span>Perfect 10/10</span><b>${Math.round(dropChance(CONFIG.SOLO.cardDropPerfect) * 100)}% card drop</b><span>AI Lab</span><b>+${CONFIG.AI_LAB.winEnergySolo} energy per win</b><span>Stamina</span><span class="stamina">${stam} <span class="tiny dim">${regen}</span></span></div>
       ${btn('Start Solo', 'startSolo', undefined, whySolo(), 'block primary big')}</div>
     <div class="card"><h3>Multiplayer Arena</h3><div class="small dim">${CONFIG.MULTI.minBots + 1}-${CONFIG.MULTI.maxBots + 1} players near your rating. Points split by score (accuracy + speed). ${CONFIG.MULTI.overrides} Human Overrides.</div>
-      <div class="kv" style="margin:8px 0"><span>Entry fee</span><b class="cr">${fmt(L.fee)} CR</b><span>Prize pool</span><b class="cr">${fmt(pool(CONFIG.MULTI.minBots + 1))}–${fmt(pool(CONFIG.MULTI.maxBots + 1))} CR</b><span>NFT drop 1st/2nd/3rd</span><b>${CONFIG.MULTI.drop.map(d => Math.round(dropChance(d) * 100) + '%').join(' / ')}</b></div>
+      <div class="kv" style="margin:8px 0"><span>Entry fee</span><b class="cr">${fmt(L.fee)} CR</b><span>Prize pool</span><b class="cr">${fmt(pool(CONFIG.MULTI.minBots + 1))}–${fmt(pool(CONFIG.MULTI.maxBots + 1))} CR</b><span>Card drop 1st/2nd/3rd</span><b>${CONFIG.MULTI.drop.map(d => Math.round(dropChance(d) * 100) + '%').join(' / ')}</b><span>AI Lab</span><b>+${CONFIG.AI_LAB.winEnergyMulti} energy for top 3</b></div>
       ${btn('Find Match', 'startMulti', undefined, whyMulti(), 'block primary big')}</div>
   </div>
   ${UI.lastResult ? `<div class="card" style="margin-top:10px"><h4>Last match</h4><div class="small">${UI.lastResult}</div></div>` : ''}
-  <div class="card" style="margin-top:10px"><h4>Random loot</h4><div class="small dim">Every correct answer has a ${Math.round(CONFIG.LOOT.perCorrect * 100)}% chance to find a <b class="warn">Data Cache</b> (DT, CR or shards). After each match: ${Math.round(CONFIG.LOOT.crateSolo * 100)}% (Solo) / ${Math.round(CONFIG.LOOT.crateMulti * 100)}% (Multiplayer) chance of a <b class="warn">Loot crate</b>, +${Math.round(CONFIG.LOOT.crateWinBonus * 100)}% if you win or finish top 3 — it can hold DT, CR, shards, stamina or an NFT.</div></div>
+  <div class="card" style="margin-top:10px"><h4>Random loot</h4><div class="small dim">Every correct answer has a ${Math.round(CONFIG.LOOT.perCorrect * 100)}% chance to find a <b class="warn">Data Cache</b> (DT, CR or shards). After each match: ${Math.round(CONFIG.LOOT.crateSolo * 100)}% (Solo) / ${Math.round(CONFIG.LOOT.crateMulti * 100)}% (Multiplayer) chance of a <b class="warn">Loot crate</b>, +${Math.round(CONFIG.LOOT.crateWinBonus * 100)}% if you win or finish top 3 — it can hold DT, CR, shards, stamina or a card.</div></div>
   <div class="tiny mute" style="margin-top:10px">Tip: in a match, press HUMAN OVERRIDE before your AI answers to answer yourself — fast and correct gives max points, wrong gives zero.</div>`;
 }
 function htmlMatch(m) {
@@ -251,10 +253,11 @@ function htmlResult(m) {
   lines.push(`<span class="cr">+${fmt(r.cr)} CR</span>${r.bonus ? ` <span class="dim">(incl. +${fmt(r.bonus)} bonus)</span>` : ''}${r.dt ? ` · <span class="dtc">+${r.dt} DT</span>` : ''}`);
   if (r.loot && r.loot.length) lines.push(`<b class="warn">LOOT:</b> ${r.loot.map(l => `<span class="good">${esc(l.text)}</span> <span class="tiny dim">(${esc(l.source)})</span>`).join(' · ')}`);
   if (r.tax) lines.push(`<span class="gvc">Guild vault +${fmt(r.tax)} GV</span> <span class="dim">(bonus, not taken from you)</span>`);
+  if (r.energy) lines.push(`<span class="dtc">+${r.energy} AI Lab energy</span> <span class="dim">— teach your AI in the AI Lab tab</span>`);
   const standings = m.type === 'multi' ? m.parts.slice().sort((a, b) => b.score - a.score).map((p, i) => `<div class="part ${p.isPlayer ? 'me' : ''}"><span class="dim">${i + 1}</span><span>${esc(p.name)}</span><span class="st">${p.correct}/${m.rounds}</span><b>${fmt(p.score)}</b></div>`).join('') : '';
   return `<div class="card center" style="padding:20px"><div class="result-big">${big}</div>${lines.map(l => `<div style="margin-top:6px">${l}</div>`).join('')}
-    ${r.nft ? `<div style="margin:14px auto 0;max-width:180px">${nftCard(r.nft)}</div><div class="good small">NFT DROP!</div>` : ''}
-    ${(r.loot || []).filter(l => l.nft).map(l => `<div style="margin:14px auto 0;max-width:180px">${nftCard(l.nft)}</div><div class="good small">LOOT NFT!</div>`).join('')}
+    ${r.card ? `<div style="margin:14px auto 0;max-width:180px">${nftCard(r.card)}</div><div class="good small">CARD DROP!</div>` : ''}
+    ${(r.loot || []).filter(l => l.card).map(l => `<div style="margin:14px auto 0;max-width:180px">${nftCard(l.card)}</div><div class="good small">LOOT CARD!</div>`).join('')}
     <div class="row" style="justify-content:center;margin-top:16px">${btn('Back to Arena', 'resultOk', undefined, '', 'primary big')}</div></div>
     ${standings ? `<h4 style="margin-top:12px">Final standings</h4><div class="parts">${standings}</div>` : ''}`;
 }
@@ -267,56 +270,57 @@ function htmlMarket() {
   if (UI.marketTab === 'browse') {
     const f = UI.mkFilter;
     let ls = S.market.listings.filter(l => l.seller !== 'player');
-    if (f.theme !== 'all') ls = ls.filter(l => l.nft.theme === f.theme);
-    if (f.level !== 'all') ls = ls.filter(l => l.nft.level === Number(f.level));
-    const deal = l => l.price / fairValue(l.nft);
+    if (f.type !== 'all') ls = ls.filter(l => l.card.type === f.type);
+    if (f.rarity !== 'all') ls = ls.filter(l => l.card.rarity === Number(f.rarity));
+    const deal = l => l.price / fairValue(l.card);
     if (f.sort === 'deal') ls.sort((a, b) => deal(a) - deal(b));
     else if (f.sort === 'asc') ls.sort((a, b) => a.price - b.price);
     else if (f.sort === 'desc') ls.sort((a, b) => b.price - a.price);
-    else ls.sort((a, b) => b.nft.level - a.nft.level || b.nft.rarity - a.nft.rarity);
+    else ls.sort((a, b) => b.card.rarity - a.card.rarity || b.card.plus - a.card.plus);
     body = `<div class="row small" style="margin-bottom:8px">
-      <select data-filter="mk.theme"><option value="all">All themes</option>${CONFIG.NFT.themes.map(t => `<option value="${t.id}" ${f.theme === t.id ? 'selected' : ''}>${t.name}</option>`).join('')}</select>
-      <select data-filter="mk.level"><option value="all">All levels</option>${[1, 2, 3, 4, 5].map(l => `<option value="${l}" ${String(f.level) === String(l) ? 'selected' : ''}>Level ${l}</option>`).join('')}</select>
-      <select data-filter="mk.sort">${[['deal', 'Best deal'], ['asc', 'Price ↑'], ['desc', 'Price ↓'], ['level', 'Level']].map(([v, l]) => `<option value="${v}" ${f.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <select data-filter="mk.type"><option value="all">All types</option>${CONFIG.CARDS.types.map(t => `<option value="${t.id}" ${f.type === t.id ? 'selected' : ''}>${t.name}</option>`).join('')}</select>
+      <select data-filter="mk.rarity"><option value="all">All rarities</option>${CONFIG.CARDS.rarities.slice(0, CONFIG.CARDS.UNIQUE).map((r, i) => `<option value="${i}" ${String(f.rarity) === String(i) ? 'selected' : ''}>${r.name}</option>`).join('')}</select>
+      <select data-filter="mk.sort">${[['deal', 'Best deal'], ['asc', 'Price ↑'], ['desc', 'Price ↓'], ['rarity', 'Rarity']].map(([v, l]) => `<option value="${v}" ${f.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
       <div class="tiny dim" style="margin-bottom:6px">${ls.length} listings · server fee ${CONFIG.MARKET.serverFee * 100}% (paid by sellers) · deal % compares price to estimated fair value</div>
       <div class="list">${ls.slice(0, 40).map(l => listingRow(l)).join('') || '<div class="empty">No listings match.</div>'}</div>`;
   } else if (UI.marketTab === 'mine') {
     const ls = playerListings();
-    body = `<div class="tiny dim" style="margin-bottom:8px">Sell from the NFT tab: open an item → Sell. ${CONFIG.MARKET.listingFee * 100}% listing fee (not refunded), max ${CONFIG.MARKET.maxListings} listings, they expire after 24 h. Items sell faster when priced at or below fair value.</div>
-      <div class="list">${ls.map(l => { const n = listingNFT(l); return n ? `<div class="listing"><div class="thumb" data-act="nftDetail" data-args="${esc(JSON.stringify(n.id))}">${Art.nft(n)}</div>
-        <div class="small"><b>${esc(nftName(n))}</b> L${n.level} <span style="color:${rarityColor(n.rarity)}">${rarityName(n.rarity)}</span><div class="dim tiny">${l.venue === 'stand' ? 'on your stand (0% fee)' : 'server market (5% fee)'} · fair ~${fmt(fairValue(n))} · expires ${cd(l.expires)}</div></div>
+    body = `<div class="tiny dim" style="margin-bottom:8px">Sell from the Cards tab: open a card → Sell. ${CONFIG.MARKET.listingFee * 100}% listing fee (not refunded), max ${CONFIG.MARKET.maxListings} listings, they expire after 24 h. Items sell faster when priced at or below fair value.</div>
+      <div class="list">${ls.map(l => { const n = listingCard(l); return n ? `<div class="listing"><div class="thumb" data-act="nftDetail" data-args="${esc(JSON.stringify(n.id))}">${Art.card(n)}</div>
+        <div class="small"><b style="color:${rarityColor(n.rarity)}">${esc(cardLabel(n))}</b><div class="dim tiny">${l.venue === 'stand' ? 'on your stand (0% fee)' : 'server market (5% fee)'} · fair ~${fmt(fairValue(n))} · expires ${cd(l.expires)}</div></div>
         <div class="col" style="align-items:flex-end"><span class="price">${fmt(l.price)}</span>${btn('Cancel', 'cancelListing', l.id, '', 'sm')}</div></div>` : ''; }).join('') || '<div class="empty">You have no active listings.</div>'}</div>`;
   } else if (UI.marketTab === 'stand') {
     const M = CONFIG.MARKET, st = S.market.stand;
     if (!st) {
-      body = `<div class="card"><h3>NFT Marketplace Stand</h3><div class="small dim">A public trade post on your land. Bots route part of their trades to it (it charges ${M.standFee * 100}% vs the server's ${M.serverFee * 100}%) and you collect <b class="cr">${M.standFee * 100}% commission</b> on every trade, even bot-to-bot.</div>
+      body = `<div class="card"><h3>Card Marketplace Stand</h3><div class="small dim">A public trade post on your land. Bots route part of their trades to it (it charges ${M.standFee * 100}% vs the server's ${M.serverFee * 100}%) and you collect <b class="cr">${M.standFee * 100}% commission</b> on every trade, even bot-to-bot.</div>
         <div class="kv" style="margin:10px 0"><span>Land needed</span><b class="landc">${fmt(M.standLand)} SU free</b><span>Setup fee</span><b class="cr">${fmt(M.standCost)} CR</b><span>League</span><b>${leagueName(M.standLeague)}+</b><span>Upkeep</span><b>${fmt(M.standLevels[0].upkeep)} CR/h</b><span>Traffic share</span><b>${M.standLevels[0].share * 100}% of bot trades</b></div>
         ${btn('Build Marketplace Stand', 'buildMarketStand', undefined, whyBuildMarketStand(), 'block primary')}</div>`;
     } else {
       const lvl = M.standLevels[st.level], nx = M.standLevels[st.level + 1];
       body = `<div class="card hl"><h3>Your Marketplace Stand — Level ${st.level + 1}</h3>
-        <div class="kv"><span>Status</span><b class="${standActive() ? 'good' : 'bad'}">${standActive() ? 'OPEN' : 'OFFLINE (unpaid upkeep)'}</b><span>Traffic share</span><b>${lvl.share * 100}% of bot trades</b><span>Commission</span><b>${M.standFee * 100}% × (1 + ${bonuses().eff.comm.toFixed(1)}% NFT bonus)</b><span>Upkeep</span><b>${fmt(lvl.upkeep)} CR/h</b><span>Total earned</span><b class="cr">${fmt(S.market.standEarned)} CR</b><span>Land</span><b>${fmt(M.standLand)} SU</b></div>
+        <div class="kv"><span>Status</span><b class="${standActive() ? 'good' : 'bad'}">${standActive() ? 'OPEN' : 'OFFLINE (unpaid upkeep)'}</b><span>Traffic share</span><b>${lvl.share * 100}% of bot trades</b><span>Commission</span><b>${M.standFee * 100}% × (1 + ${bonuses().eff.comm.toFixed(1)}% card bonus)</b><span>Upkeep</span><b>${fmt(lvl.upkeep)} CR/h</b><span>Total earned</span><b class="cr">${fmt(S.market.standEarned)} CR</b><span>Land</span><b>${fmt(M.standLand)} SU</b></div>
         <div class="row" style="margin-top:10px">${nx ? btn(`Upgrade to L${st.level + 2} (${nx.share * 100}% traffic) <span class="cost">${fmt(nx.cost)} CR</span>`, 'upgradeMarketStand', undefined, whyUpgradeMarketStand(), 'primary') : '<span class="good">MAX LEVEL</span>'}${btn('Demolish (50% refund)', 'demolishMarketStand', undefined, '', 'danger sm')}</div></div>`;
     }
   } else {
-    const h = S.market.history[UI.chartTheme] || [];
-    const norm = x => x.p / Math.pow(CONFIG.MARKET.fairGrowth, x.l - 1) / Math.pow(CONFIG.NFT.rarities[x.r].mult, 1.5);
+    const T = cardType(UI.chartType);
+    const h = S.market.history[T.id] || [];
+    const norm = x => x.p / Math.pow(CONFIG.MARKET.fairGrowth, (x.r || 0) * 1.6 + (x.pl || 0) * 0.45);
     const pts = h.map((x, i) => [i, Math.round(norm(x))]);
-    const byL = {};
-    h.forEach(x => { (byL[x.l] = byL[x.l] || []).push(x.p); });
-    body = `<div class="row" style="margin-bottom:8px">${CONFIG.NFT.themes.map(t => `<button class="chip ${UI.chartTheme === t.id ? 'on' : ''}" data-act="chartTheme" data-args='"${t.id}"'>${t.name}</button>`).join('')}</div>
-      <div class="card"><h4>${themeById(UI.chartTheme).name} — last ${h.length} sales (price normalised to Level 1 Common)</h4>
-      ${Art.lineChart([{ points: pts, color: themeById(UI.chartTheme).c[0], fill: true, dots: true }], { h: 140, zero: true, empty: 'No sales recorded yet — the market needs a few minutes of game time.' })}
-      <div class="small dim" style="margin-top:6px">Demand: <b>${((S.market.demand[UI.chartTheme] || 1) * 100).toFixed(0)}%</b> · ${Object.keys(byL).sort().map(l => `L${l} avg <b class="cr">${fmt(byL[l].reduce((a, b) => a + b, 0) / byL[l].length)}</b>`).join(' · ')}</div></div>`;
+    const byR = {};
+    h.forEach(x => { (byR[x.r || 0] = byR[x.r || 0] || []).push(x.p); });
+    body = `<div class="row" style="margin-bottom:8px">${CONFIG.CARDS.types.map(t => `<button class="chip ${UI.chartType === t.id ? 'on' : ''}" data-act="chartType" data-args='"${t.id}"'>${t.name}</button>`).join('')}</div>
+      <div class="card"><h4>${T.name} — last ${h.length} sales (price normalised to Common +0)</h4>
+      ${Art.lineChart([{ points: pts, color: T.c[0], fill: true, dots: true }], { h: 140, zero: true, empty: 'No sales recorded yet — the market needs a few minutes of game time.' })}
+      <div class="small dim" style="margin-top:6px">Demand: <b>${((S.market.demand[T.id] || 1) * 100).toFixed(0)}%</b> · ${Object.keys(byR).sort().map(r => `${rarityName(Number(r))} avg <b class="cr">${fmt(byR[r].reduce((a, b) => a + b, 0) / byR[r].length)}</b>`).join(' · ')}</div></div>`;
   }
   return subtabs + body;
 }
 function listingRow(l) {
-  const n = l.nft, f = fairValue(n), d = Math.round((l.price / f - 1) * 100);
+  const n = l.card, f = fairValue(n), d = Math.round((l.price / f - 1) * 100);
   const seller = botById(l.seller);
-  return `<div class="listing"><div class="thumb" data-act="listingDetail" data-args="${esc(JSON.stringify(l.id))}">${Art.nft(n)}</div>
-    <div class="small"><b>${esc(nftName(n))}</b> L${n.level} <span style="color:${rarityColor(n.rarity)}">${rarityName(n.rarity)}</span>${l.venue === 'stand' ? ' <span class="tag ls">YOUR STAND</span>' : ''}
-    <div class="tiny dim">${n.affixes.map(affixText).join(' · ')}</div><div class="tiny mute">by ${esc(seller ? seller.name : 'trader')} · ${cd(l.expires)}</div></div>
+  return `<div class="listing"><div class="thumb" data-act="listingDetail" data-args="${esc(JSON.stringify(l.id))}">${Art.card(n)}</div>
+    <div class="small"><b style="color:${rarityColor(n.rarity)}">${esc(cardLabel(n))}</b>${l.venue === 'stand' ? ' <span class="tag ls">YOUR STAND</span>' : ''}
+    <div class="tiny dim">${cardStats(n).map(statText).join(' · ')}</div><div class="tiny mute">by ${esc(seller ? seller.name : 'trader')} · ${cd(l.expires)}</div></div>
     <div class="col" style="align-items:flex-end;gap:4px"><span class="price">${fmt(l.price)}</span><span class="deal ${d <= 0 ? 'good' : d > 15 ? 'bad' : 'warn'}">${d > 0 ? '+' : ''}${d}% vs fair</span>${btn('Buy', 'buyListing', l.id, whyBuyListing(l.id), 'sm primary')}</div></div>`;
 }
 
@@ -362,7 +366,7 @@ function htmlTerritory() {
   }
   const pager = pages > 1 ? `<div class="row" style="margin-top:8px">${Array.from({ length: pages }, (_, p) => `<button class="chip ${p === UI.tilePage ? 'on' : ''}" data-act="tilePage" data-args="${p}">${p * E.pageSize + 1}-${Math.min(n, (p + 1) * E.pageSize)}</button>`).join('')}</div>` : '';
   return `<div class="card" style="margin-top:10px"><div class="row between"><h3 style="margin:0">${ic('land')} Your territory</h3><span class="small">${ex}/${n} explored</span></div>
-    <div class="tiny dim" style="margin:4px 0 8px">Every ${E.tileSU} SU you own is a sector. Tap a <b style="color:var(--a)">?</b> sector to explore it once: DT, CR, shards, a rare NFT or a CR jackpot. Buy more land to get new sectors.</div>
+    <div class="tiny dim" style="margin:4px 0 8px">Every ${E.tileSU} SU you own is a sector. Tap a <b style="color:var(--a)">?</b> sector to explore it once: DT, CR, shards, a rare card or a CR jackpot. Buy more land to get new sectors.</div>
     ${n ? `<div class="tiles">${tiles}</div>${pager}<div class="row" style="margin-top:8px">${btn('Explore all', 'exploreAll', undefined, ex >= n ? 'Nothing left to explore - buy more land' : '', 'sm accent')}</div>` : `<div class="empty">You own less than ${E.tileSU} SU. Buy a plot to get sectors.</div>`}</div>`;
 }
 function getCss(v) { try { return getComputedStyle(document.body).getPropertyValue(v).trim() || '#39ff88'; } catch (e) { return '#39ff88'; } }
@@ -372,7 +376,7 @@ function htmlSeason() {
   const p = S.player, rank = leaderboard('rating').findIndex(e => e.isPlayer) + 1;
   const missions = S.missions.list.map((m, i) => {
     const done = m.progress >= m.target;
-    return `<div class="mission ${done ? 'done' : ''}"><div><div class="small">${esc(m.text)}</div><div class="xp" style="margin:5px 0"><i style="width:${(m.progress / m.target * 100).toFixed(0)}%"></i></div><div class="tiny dim">${fmt(m.progress)}/${fmt(m.target)} · reward ${m.reward.dt} DT, ${fmt(m.reward.cr)} CR, ${m.reward.shards} shards, 25% NFT</div></div>
+    return `<div class="mission ${done ? 'done' : ''}"><div><div class="small">${esc(m.text)}</div><div class="xp" style="margin:5px 0"><i style="width:${(m.progress / m.target * 100).toFixed(0)}%"></i></div><div class="tiny dim">${fmt(m.progress)}/${fmt(m.target)} · reward ${m.reward.dt} DT, ${fmt(m.reward.cr)} CR, ${m.reward.shards} shards, 25% card</div></div>
       ${m.claimed ? '<span class="good small">CLAIMED</span>' : btn('Claim', 'claimMission', i, done ? '' : 'Not complete yet', 'sm primary')}</div>`;
   }).join('');
   const nextDay = (gameDay() + 1) * CONFIG.DAY;
@@ -386,7 +390,7 @@ function htmlSeason() {
   return `<div class="cards">
     <div class="card"><h3>${ic('season')} Season ${S.season.index}</h3><div class="kv"><span>Ends in</span><b>${cd(S.season.start + CONFIG.SEASON.lengthMs)}</b><span>Your rank</span><b>#${rank} of ${S.bots.length + 1}</b><span>Your league</span><b style="color:${CONFIG.LEAGUES[p.league].color}">${leagueName(p.league)}</b><span>End reward now</span><b class="cr">${fmt(CONFIG.SEASON.rewards[p.league].cr)} CR + ${CONFIG.SEASON.rewards[p.league].shards} shards</b></div>
       <div class="tiny dim" style="margin-top:6px">At season end ratings soft-reset halfway toward 1000 and you get a title.${p.titles.length ? ' Titles: ' + p.titles.map(esc).join(', ') : ''}</div></div>
-    <div class="card"><h3>Neural Rebirth</h3><div class="small dim">Reach ${leagueName(CONFIG.PRESTIGE.league)} league, then reset pet stats, stands and rating to gain Legacy points: permanent +${CONFIG.PRESTIGE.legacyPerPoint * 100}% training & CR each (max +${CONFIG.PRESTIGE.legacyCap * 100}%). You keep NFTs, land, CR, guild and cosmetics.</div>
+    <div class="card"><h3>Neural Rebirth</h3><div class="small dim">Reach ${leagueName(CONFIG.PRESTIGE.league)} league, then reset pet stats, stands and rating to gain Legacy points: permanent +${CONFIG.PRESTIGE.legacyPerPoint * 100}% training & CR each (max +${CONFIG.PRESTIGE.legacyCap * 100}%). You keep cards, land, CR, guild and cosmetics.</div>
       <div class="kv" style="margin:8px 0"><span>Legacy</span><b>${p.legacy} (+${Math.round(legacyBonus() * 100)}%)</b><span>Rebirth now gives</span><b>+${legacyGain()} Legacy</b></div>
       ${btn('Neural Rebirth', 'rebirth', undefined, reb, 'block ' + (reb ? '' : 'primary'))}</div>
   </div>
@@ -400,9 +404,9 @@ function htmlSeason() {
 // RIGHT — Guild / NFTs
 // ============================================================
 function htmlRight() {
-  const tabs = [['nfts', 'NFTs', 'nft'], ['guild', 'Guild', 'guild']];
-  const t = tabs.map(([id, l, i]) => `<button class="tab ${UI.rightTab === id ? 'on' : ''}" data-act="rightTab" data-args='"${id}"'>${ic(i)} ${l}${id === 'nfts' ? ` <span class="dim tiny">${S.inv.length}</span>` : ''}</button>`).join('');
-  return `<div class="tabs">${t}</div>${UI.rightTab === 'guild' ? htmlGuild() : htmlNfts()}`;
+  const tabs = [['cards', 'Cards', 'nft'], ['album', 'Album', 'season'], ['guild', 'Guild', 'guild']];
+  const t = tabs.map(([id, l, i]) => `<button class="tab ${UI.rightTab === id ? 'on' : ''}" data-act="rightTab" data-args='"${id}"'>${ic(i)} ${l}${id === 'cards' ? ` <span class="dim tiny">${S.inv.length}</span>` : ''}</button>`).join('');
+  return `<div class="tabs">${t}</div>${UI.rightTab === 'guild' ? htmlGuild() : UI.rightTab === 'album' ? htmlAlbum() : htmlCards()}`;
 }
 
 // ---------- guild ----------
@@ -437,119 +441,168 @@ function htmlGuild() {
     <div style="margin-top:10px">${btn('Leave guild', 'leaveGuild', undefined, '', 'danger sm')}</div>`;
 }
 
-// ---------- NFTs ----------
+// ---------- cards ----------
 function nftCard(n, opts) {
   opts = opts || {};
   const tags = [isEquipped(n.id) ? '<span class="tag eq">EQUIPPED</span>' : '', n.listed ? '<span class="tag ls">LISTED</span>' : '', n.locked ? '<span class="tag lk">LOCKED</span>' : ''].join('');
   const sel = UI.selected.includes(n.id) ? 'sel' : '';
-  return `<div class="nft ${sel}" data-act="${opts.act || 'nftClick'}" data-args="${esc(JSON.stringify(n.id))}" title="${esc(nftName(n))} L${n.level} ${rarityName(n.rarity)}">${Art.nft(n)}<div class="tags">${tags}</div><div class="nm">${esc(CONFIG.NFT.slots[n.slot])} · ${esc(themeById(n.theme).name.split(' ')[0])}</div></div>`;
+  return `<div class="nft ${sel} ${n.rarity === CONFIG.CARDS.UNIQUE ? 'unique-glow' : ''}" data-act="${opts.act || 'nftClick'}" data-args="${esc(JSON.stringify(n.id))}" title="${esc(cardLabel(n))}">${Art.card(n)}<div class="tags">${tags}</div><div class="nm" style="color:${rarityColor(n.rarity)}">${esc(cardType(n.type).name)}${n.plus ? ' +' + n.plus : ''}</div></div>`;
 }
-function htmlNfts() {
-  const b = bonuses(), f = UI.nftFilter;
-  const bonusRows = Object.keys(CONFIG.NFT.affixes).map(k => {
-    const A = CONFIG.NFT.affixes[k], capd = b.raw[k] - b.eff[k] > 0.5;
+function htmlCards() {
+  const b = bonuses(), f = UI.nftFilter, C = CONFIG.CARDS, hi = b.heat;
+  const bonusRows = Object.keys(C.stats).map(k => {
+    const A = C.stats[k], capd = b.raw[k] - b.eff[k] > 0.5;
     return `<div class="bonus-row"><span>${A.name}</span><span class="dim">raw ${A.sign}${b.raw[k].toFixed(1)}%</span><b class="${b.eff[k] > 0 ? 'good' : 'mute'}">${A.sign}${b.eff[k].toFixed(1)}% ${capd ? '<span class="capped">CAPPED</span>' : ''}</b></div>`;
   }).join('');
-  const eq = equippedItems();
-  const slots = [];
-  for (let i = 0; i < CONFIG.NFT.equipSlots; i++) slots.push(eq[i] ? nftCard(eq[i], { act: 'nftDetail' }) : '<div class="slot-empty">empty</div>');
-  const sets = b.sets.map(s => `<div class="good small">SET ACTIVE: ${themeById(s.theme).name} L${s.level} → bonuses ×${s.mult}</div>`).join('');
-  const prog = CONFIG.NFT.themes.map(t => {
-    let best = 0, bestL = 1;
-    const levels = [...new Set(S.inv.filter(n => n.theme === t.id).map(n => n.level))];
-    for (const l of levels) { const c = new Set(S.inv.filter(n => n.theme === t.id && n.level === l).map(n => n.slot)).size; if (c > best) { best = c; bestL = l; } }
-    return best ? `<span>${t.name}</span><b class="${best === 5 ? 'good' : ''}">${best}/5 <span class="dim tiny">L${bestL}</span></b>` : '';
+  const slots = C.types.map(t => {
+    const c = equippedOfType(t.id);
+    return `<div class="card-slot">${c ? nftCard(c, { act: 'nftDetail' }) : `<div class="slot-empty tiny">no ${esc(t.name)}</div>`}<div class="slot-name">${esc(t.name)}</div></div>`;
   }).join('');
+  const heatPct = hi.cooling ? Math.min(100, hi.heat / hi.cooling * 100) : 0;
+  const setLine = b.set ? `<div class="good small">FULL RIG: all 4 types equipped → +${b.set.pct}% to all card stats (lowest rarity: ${rarityName(b.set.rarity)})</div>`
+    : `<div class="tiny dim">Equip all 4 types for a set bonus: +${C.setBonus.join('/')}% by lowest rarity.</div>`;
   let items = S.inv.slice();
-  if (f.theme !== 'all') items = items.filter(n => n.theme === f.theme);
-  if (f.level !== 'all') items = items.filter(n => n.level === Number(f.level));
+  if (f.type !== 'all') items = items.filter(n => n.type === f.type);
   if (f.rarity !== 'all') items = items.filter(n => n.rarity === Number(f.rarity));
-  if (f.sort === 'level') items.sort((a, c) => c.level - a.level || c.rarity - a.rarity || a.theme.localeCompare(c.theme) || a.slot - c.slot);
-  else if (f.sort === 'theme') items.sort((a, c) => a.theme.localeCompare(c.theme) || a.level - c.level || a.slot - c.slot);
+  if (f.plus !== 'all') items = items.filter(n => n.plus === Number(f.plus));
+  if (f.sort === 'rarity') items.sort((a, c) => c.rarity - a.rarity || c.plus - a.plus || a.type.localeCompare(c.type));
+  else if (f.sort === 'type') items.sort((a, c) => a.type.localeCompare(c.type) || c.rarity - a.rarity || c.plus - a.plus);
   else items.sort((a, c) => c.createdAt - a.createdAt);
   const selItems = UI.selected.map(id => S.inv.find(n => n.id === id)).filter(Boolean);
-  const fuseR = whyFuse(UI.selected);
-  const salvR = selItems.length ? (selItems.map(n => nftStatusReason(n)).find(Boolean) || '') : 'Select NFTs first';
-  const salvVal = selItems.reduce((s, n) => s + salvageValue(n), 0);
+  const salvR = selItems.length ? (selItems.map(n => cardStatusReason(n)).find(Boolean) || '') : 'Select cards first';
+  const salvVal = selItems.reduce((s2, n) => s2 + salvageValue(n), 0);
   const selBar = UI.selectMode ? `<div class="card hl" style="margin:8px 0"><div class="row between small"><b>SELECT MODE</b><span>${UI.selected.length} selected</span></div>
-      <div class="row" style="margin-top:6px">${btn(`Fuse 5 → L${selItems[0] ? selItems[0].level + 1 : '?'}${!fuseR ? ` <span class="cost">${fmt(fusionFee(selItems[0].level))} CR</span>` : ''}`, 'fuseSelected', undefined, fuseR, 'primary sm')}
-      ${btn(`Salvage → ${salvVal} shards`, 'salvageSelected', undefined, salvR, 'sm danger')}${btn('Auto-pick a set', 'autoSet', undefined, '', 'sm accent')}${btn('Clear', 'clearSel', undefined, '', 'sm')}${btn('Done', 'toggleSelect', undefined, '', 'sm')}</div>
-      <div class="tiny dim" style="margin-top:4px">Fusion: 5 NFTs of the same theme and level, one of each slot (Core, Lens, Spine, Crown, Key) → 1 NFT of the next level. Max level ${CONFIG.NFT.maxLevel}.</div></div>` : '';
-  const shardOpts = CONFIG.NFT.themes.map(t => `<option value="${t.id}" ${UI.inputs.shardTheme === t.id ? 'selected' : ''}>${t.name}</option>`).join('');
-  const slotOpts = CONFIG.NFT.slots.map((s, i) => `<option value="${i}" ${String(UI.inputs.shardSlot) === String(i) ? 'selected' : ''}>${s}</option>`).join('');
-  return `<h3>Active bonuses</h3>${bonusRows}${sets}
-    <h4 style="margin-top:10px">Equipped (${eq.length}/${CONFIG.NFT.equipSlots}) — only equipped NFTs give bonuses</h4><div class="slots">${slots.join('')}</div>
-    ${prog ? `<h4 style="margin-top:10px">Set progress (best level)</h4><div class="setprog">${prog}</div>` : ''}
+      <div class="row" style="margin-top:6px">${btn(`Salvage → ${salvVal} shards`, 'salvageSelected', undefined, salvR, 'sm danger')}${btn('Select all Common', 'selCommon', undefined, '', 'sm accent')}${btn('Clear', 'clearSel', undefined, '', 'sm')}${btn('Done', 'toggleSelect', undefined, '', 'sm')}</div>
+      <div class="tiny dim" style="margin-top:4px">Equipped, listed and locked cards are protected.</div></div>` : '';
+  const forgeOpts = C.types.map(t => `<option value="${t.id}" ${UI.inputs.forgeType === t.id ? 'selected' : ''}>${t.name}</option>`).join('');
+  return `<h3>Active bonuses</h3>${bonusRows}${setLine}
+    <div class="row between small" style="margin-top:8px"><span>Heat <b class="${hi.over ? 'bad' : 'good'}">${hi.heat}</b> / cooling <b>${hi.cooling}</b></span><span class="${hi.over ? 'bad' : 'dim'}">${hi.over ? `OVERHEATING: bonuses ×${hi.mult.toFixed(2)}` : 'cool'}</span></div>
+    <div class="heatbar" title="Core and Hardware make heat, Coolers remove it"><i class="${hi.over ? 'over' : ''}" style="width:${heatPct.toFixed(0)}%"></i></div>
+    <div class="tiny dim">Core & Hardware heat up the rig, a Cooler keeps it cool. If heat passes cooling, all bonuses drop (down to ×${C.heat.minMult}).</div>
+    <h4 style="margin-top:10px">Your rig — one card per type</h4><div class="card-slots slots">${slots}</div>
+    <div class="row between" style="margin-top:10px"><span class="small">${ic('ai')} Neural Recalibrators: <b class="good">${S.player.recal}</b></span><span class="tiny dim">reroll a card's bonus stats</span></div>
     <div class="sep"></div>
-    <div class="row between"><h3 style="margin:0">Inventory ${S.inv.length}/${CONFIG.NFT.inventoryMax}</h3>${btn(UI.selectMode ? 'Exit select' : 'Select / Fuse', 'toggleSelect', undefined, '', 'sm ' + (UI.selectMode ? '' : 'accent'))}</div>
+    <div class="row between"><h3 style="margin:0">Inventory ${S.inv.length}/${C.inventoryMax}</h3>${btn(UI.selectMode ? 'Exit select' : 'Select / Salvage', 'toggleSelect', undefined, '', 'sm ' + (UI.selectMode ? '' : 'accent'))}</div>
     ${selBar}
     <div class="row small" style="margin:8px 0">
-      <select data-filter="nft.theme"><option value="all">All themes</option>${CONFIG.NFT.themes.map(t => `<option value="${t.id}" ${f.theme === t.id ? 'selected' : ''}>${t.name}</option>`).join('')}</select>
-      <select data-filter="nft.level"><option value="all">All lv</option>${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(l => `<option value="${l}" ${String(f.level) === String(l) ? 'selected' : ''}>L${l}</option>`).join('')}</select>
-      <select data-filter="nft.rarity"><option value="all">All rarity</option>${CONFIG.NFT.rarities.map((r, i) => `<option value="${i}" ${String(f.rarity) === String(i) ? 'selected' : ''}>${r.name}</option>`).join('')}</select>
-      <select data-filter="nft.sort">${[['level', 'Sort: level'], ['theme', 'Sort: theme'], ['new', 'Sort: newest']].map(([v, l]) => `<option value="${v}" ${f.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-    <div class="nft-grid">${items.map(n => nftCard(n)).join('') || '<div class="empty" style="grid-column:1/-1">No NFTs yet. Win Multiplayer top-3, perfect Solo runs, missions, or buy on the market.</div>'}</div>
+      <select data-filter="nft.type"><option value="all">All types</option>${C.types.map(t => `<option value="${t.id}" ${f.type === t.id ? 'selected' : ''}>${t.name}</option>`).join('')}</select>
+      <select data-filter="nft.rarity"><option value="all">All rarity</option>${C.rarities.map((r, i) => `<option value="${i}" ${String(f.rarity) === String(i) ? 'selected' : ''}>${r.name}</option>`).join('')}</select>
+      <select data-filter="nft.plus"><option value="all">All +</option>${[0, 1, 2, 3, 4].map(l => `<option value="${l}" ${String(f.plus) === String(l) ? 'selected' : ''}>+${l}</option>`).join('')}</select>
+      <select data-filter="nft.sort">${[['rarity', 'Sort: rarity'], ['type', 'Sort: type'], ['new', 'Sort: newest']].map(([v, l]) => `<option value="${v}" ${f.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    <div class="nft-grid">${items.map(n => nftCard(n)).join('') || '<div class="empty" style="grid-column:1/-1">No cards yet. Win Multiplayer top-3, perfect Solo runs, missions, the AI Lab, or buy on the market.</div>'}</div>
     <div class="sep"></div>
-    <h3>${ic('shard')} Shard forge</h3><div class="tiny dim">Salvage unwanted NFTs into shards, then forge the exact Level 1 slot you're missing (${CONFIG.NFT.shardBuyCost} shards). You have <b class="shardc">${S.player.shards}</b>.</div>
-    <div class="row" style="margin-top:6px"><select data-in="shardTheme" style="width:auto;flex:1">${shardOpts}</select><select data-in="shardSlot" style="width:auto">${slotOpts}</select>${btn('Forge', 'shardBuy', undefined, whyShardBuy(UI.inputs.shardTheme || CONFIG.NFT.themes[0].id, Number(UI.inputs.shardSlot || 0)), 'accent')}</div>
-    <div class="tiny mute" style="margin-top:6px">Drop chances: Multiplayer 1st/2nd/3rd ${CONFIG.MULTI.drop.map(d => Math.round(dropChance(d) * 100) + '%').join('/')}, perfect Solo ${Math.round(dropChance(CONFIG.SOLO.nftDropPerfect) * 100)}%, mission claim 25%.</div>`;
+    <h3>${ic('shard')} Shard forge</h3><div class="tiny dim">Salvage unwanted cards into shards, then forge a Common card of the type you need (${C.forgeCost} shards). Shards also pay for upgrades. You have <b class="shardc">${S.player.shards}</b>.</div>
+    <div class="row" style="margin-top:6px"><select data-in="forgeType" style="width:auto;flex:1">${forgeOpts}</select>${btn('Forge', 'forge', undefined, whyForge(UI.inputs.forgeType || C.types[0].id), 'accent')}</div>
+    <div class="tiny mute" style="margin-top:6px">Drop chances: Multiplayer 1st/2nd/3rd ${CONFIG.MULTI.drop.map(d => Math.round(dropChance(d) * 100) + '%').join('/')}, perfect Solo ${Math.round(dropChance(CONFIG.SOLO.cardDropPerfect) * 100)}%, mission claim 25%, AI Lab ${Math.round(CONFIG.AI_LAB.cardChance * 100)}%. <b style="color:#ffe14d">Unique</b> cards come only from the AI Lab.</div>`;
 }
 
-// ---------- NFT detail modal ----------
+// ---------- album ----------
+function htmlAlbum() {
+  const C = CONFIG.CARDS;
+  const head = `<div></div>` + C.rarities.map((r, i) => `<div class="tiny center" style="color:${rarityColor(i)}">${r.name}</div>`).join('');
+  const rows = C.types.map(t => `<div class="small">${esc(t.name)}</div>` + C.rarities.map((r, i) => {
+    const on = S.album[albumKey(t.id, i)] !== undefined;
+    return `<div class="cell ${on ? 'on' : ''}" style="${on ? `background:${rarityColor(i)}` : ''}">${on ? '✓' : '?'}</div>`;
+  }).join('')).join('');
+  const total = C.types.length * C.rarities.length, got = Object.keys(S.album).length;
+  const cols = C.rarities.map((r, i) => {
+    const n = C.types.filter(t => S.album[albumKey(t.id, i)] !== undefined).length;
+    return `<span>${r.name}</span><b class="${n === C.types.length ? 'good' : ''}">${n}/${C.types.length} · ${C.album.columnShards[i]} shards + ${C.album.columnRecal} Recalibrator</b>`;
+  }).join('');
+  return `<h3>Card album <span class="dim">${got}/${total}</span></h3>
+    <div class="tiny dim" style="margin-bottom:8px">Every new type × rarity you obtain (drop, market, upgrade or evolution) fills a slot: +${C.album.entryShards} shards. Complete a rarity column (all 4 types) for a bigger reward.</div>
+    <div class="album">${head}${rows}</div>
+    <h4 style="margin-top:12px">Column rewards</h4><div class="kv">${cols}</div>`;
+}
+
+// ---------- card detail modal ----------
 function openNftDetail(id, fromListing) {
   let n, l = null;
-  if (fromListing) { l = S.market.listings.find(x => x.id === id); n = l && l.nft; }
+  if (fromListing) { l = S.market.listings.find(x => x.id === id); n = l && l.card; }
   else n = S.inv.find(x => x.id === id);
   if (!n) { closeModal(); return; }
   UI.modalKind = { type: fromListing ? 'listing' : 'nft', id };
-  const R = CONFIG.NFT.rarities[n.rarity];
-  const setInfo = (() => { const c = new Set(S.inv.filter(x => x.theme === n.theme && x.level === n.level).map(x => x.slot)).size; return `${c}/5 slots owned at L${n.level}`; })();
+  const C = CONFIG.CARDS, R = C.rarities[n.rarity], T = cardType(n.type);
+  const stats = cardStats(n).map(st => `<div class="stat-line ${st.main ? 'main' : ''}"><span>${st.main ? '◆ ' : ''}${C.stats[st.type].name}${st.main ? ' <span class="tiny dim">(fixed)</span>' : ''}</span><b class="good">${C.stats[st.type].sign}${st.value}%</b></div>`).join('');
+  const heatTxt = T.heat ? `<span>Heat</span><b class="warn">+${cardHeat(n)}</b>` : `<span>Cooling</span><b class="dtc">${cardCooling(n)}</b>`;
   let actions = '';
   if (!fromListing) {
     const eqd = isEquipped(n.id);
-    actions = `<div class="row" style="margin-top:12px">${eqd ? btn('Unequip', 'unequip', n.id, '', 'primary') : btn('Equip', 'equip', n.id, whyEquip(n.id), 'primary')}
+    const up = n.plus < C.maxPlus ? upgradeCost(n) : null, ev = n.plus >= C.maxPlus ? evolveCost(n) : null;
+    const growBtn = up ? btn(`Upgrade to +${n.plus + 1} <span class="cost">${cardCostText(up)}</span>`, 'upgradeCard', n.id, whyUpgradeCard(n.id), 'primary')
+      : ev ? btn(`Evolve → ${rarityName(n.rarity + 1)} <span class="cost">${cardCostText(ev)}</span>`, 'evolveCard', n.id, whyEvolveCard(n.id), 'primary')
+      : `<span class="good small">${n.rarity === C.UNIQUE ? 'UNIQUE — maxed' : 'MAX'}</span>`;
+    actions = `<div class="row" style="margin-top:12px">${growBtn}${btn(`Reroll bonus stats <span class="cost">1 Recalibrator (${S.player.recal})</span>`, 'rerollCard', n.id, whyRerollCard(n.id), 'accent')}</div>
+      <div class="row" style="margin-top:8px">${eqd ? btn('Unequip', 'unequip', n.id, '', '') : btn(equippedOfType(n.type) ? `Equip (replaces your ${T.name})` : 'Equip', 'equip', n.id, whyEquip(n.id), '')}
       ${btn(n.locked ? 'Unlock' : 'Lock', 'toggleLock', n.id, '', '')}
-      ${btn(`Salvage → ${salvageValue(n)} shards`, 'salvageOne', n.id, whySalvage(n.id), 'danger')}
-      ${btn(UI.selected.includes(n.id) ? 'Unselect' : 'Select for fusion', 'selectOne', n.id, '', 'accent')}</div>
+      ${btn(`Salvage → ${salvageValue(n)} shards`, 'salvageOne', n.id, whySalvage(n.id), 'danger')}</div>
       ${n.listed ? `<div class="warn small" style="margin-top:8px">Listed on the market (escrow). Cancel it in Market → My listings.</div>` : `<div class="card" style="margin-top:12px"><h4>Sell on the market</h4><div class="row"><input type="number" min="1" data-in="sellPrice" value="${esc(UI.inputs.sellPrice || fairValue(n))}" style="flex:1;width:auto"><select data-in="sellVenue" style="width:auto">${`<option value="server">Server (5% fee)</option>` + (standActive() ? `<option value="stand" ${UI.inputs.sellVenue === 'stand' ? 'selected' : ''}>My stand (0%)</option>` : '')}</select>${btn('List', 'listNft', n.id, '', 'accent')}</div><div class="tiny dim" style="margin-top:4px">Fair value ~${fmt(fairValue(n))} CR · listing fee ${CONFIG.MARKET.listingFee * 100}% (min 1 CR), not refunded.</div></div>`}`;
   } else {
     actions = `<div class="row" style="margin-top:12px"><span class="price">${fmt(l.price)} CR</span>${btn('Buy now', 'buyListing', l.id, whyBuyListing(l.id), 'primary')}</div>`;
   }
-  openModal(modalHead(esc(nftName(n))) + `<div class="nft-detail"><div class="art">${Art.nft(n)}</div><div>
-    <div class="row"><b style="color:${R.color}">${R.name}</b><span>Level <b>${n.level}</b>/${CONFIG.NFT.maxLevel}</span>${n.stars ? `<span style="color:#ffe14d">${'★'.repeat(n.stars)}</span>` : ''}</div>
-    <div class="tiny dim">Serial #0x${(n.dna >>> 0).toString(16).toUpperCase().padStart(8, '0')} · slot ${CONFIG.NFT.slots[n.slot]} · ${setInfo}</div>
-    <div style="margin-top:8px">${n.affixes.map(a => `<div class="affix"><span>${CONFIG.NFT.affixes[a.type].name}</span><b class="good">${CONFIG.NFT.affixes[a.type].sign}${a.value}%</b></div>`).join('')}</div>
-    <div class="small dim" style="margin-top:6px">Fair market value ~<b class="cr">${fmt(fairValue(n))} CR</b></div>
+  const path = n.rarity < C.MAX_CRAFT_RARITY ? `+0 → +${C.maxPlus}, then evolve to ${rarityName(n.rarity + 1)}` : n.rarity === C.UNIQUE ? 'Unique: upgrade to +4, never evolves' : 'Legendary: top craftable rarity, upgrade to +4';
+  openModal(modalHead(`<span style="color:${rarityColor(n.rarity)}">${esc(cardLabel(n))}</span>`) + `<div class="nft-detail"><div class="art">${Art.card(n)}</div><div>
+    <div class="row"><b style="color:${rarityColor(n.rarity)}">${R.name}</b><span>${esc(T.name)}</span><span>Level <b>+${n.plus}</b>/${C.maxPlus}</span></div>
+    <div class="tiny dim">Serial #0x${(n.dna >>> 0).toString(16).toUpperCase().padStart(8, '0')} · ${R.bonus} random bonus stat${R.bonus > 1 ? 's' : ''} · ${path}</div>
+    <div style="margin-top:8px">${stats}</div>
+    <div class="kv" style="margin-top:6px">${heatTxt}<span>Fair market value</span><b class="cr">~${fmt(fairValue(n))} CR</b></div>
     ${actions}</div></div>`, true);
 }
 
-// ---------- fusion confirm + animation ----------
-function confirmFusion() {
-  const r = whyFuse(UI.selected);
-  if (r) { toast(r, 'err'); return; }
-  const items = UI.selected.map(id => S.inv.find(n => n.id === id));
-  const pv = fusionPreview(UI.selected);
-  confirmBox('Confirm fusion', `<div class="small">These 5 NFTs will be <b class="bad">burned</b>:</div><div class="slots" style="margin:10px 0">${items.map(n => `<div>${nftCard(n, { act: 'noop' })}</div>`).join('')}</div>
-    <div class="kv"><span>Result</span><b>1 × ${themeById(pv.theme).name} Level ${pv.level} (random slot, missing slots favoured)</b><span>Fee</span><b class="cr">${fmt(pv.fee)} CR</b></div>`, 'Fuse', () => {
-    const snap = items.map(n => Art.nft(n));
-    const res = actFuse(UI.selected);
-    if (!res.ok) { toast(res.msg, 'err'); closeModal(); return; }
-    UI.selected = [];
-    saveGame();
-    playFusionAnim(snap, res.nft);
-  });
-}
-function playFusionAnim(snaps, out) {
-  const pos = [[10, 10], [70, 5], [80, 60], [45, 80], [5, 65]];
-  openModal(modalHead('Fusion') + `<div class="fusion-fx" data-act="closeModal">${snaps.map((s, i) => `<div class="fly" style="left:${pos[i][0]}%;top:${pos[i][1]}%">${s}</div>`).join('')}<div class="flash"></div><div class="out">${Art.nft(out)}</div></div>
-    <div class="center"><b style="color:${rarityColor(out.rarity)}">${esc(nftName(out))} — Level ${out.level} ${rarityName(out.rarity)}</b><div class="small dim">${out.affixes.map(affixText).join(' · ')}</div></div>
+// ---------- evolution flash ----------
+function playEvolveAnim(c) {
+  openModal(modalHead('Evolution!') + `<div class="fusion-fx" data-act="closeModal"><div class="flash" style="opacity:1;transform:scale(3)"></div><div class="out" style="opacity:1;transform:scale(1)">${Art.card(c)}</div></div>
+    <div class="center"><b style="color:${rarityColor(c.rarity)}">${esc(cardLabel(c))}</b><div class="small dim">${cardStats(c).map(statText).join(' · ')}</div></div>
     <div class="row" style="justify-content:center;margin-top:10px">${btn('Nice!', 'closeModal', undefined, '', 'primary')}</div>`);
   const box = $('#modal');
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    box.querySelectorAll('.fly').forEach(el => { el.style.left = 'calc(50% - 35px)'; el.style.top = 'calc(50% - 35px)'; el.style.opacity = '0.2'; el.style.transform = 'scale(.5)'; });
-    setTimeout(() => { const f = box.querySelector('.flash'); if (f) { f.style.opacity = '1'; f.style.transform = 'scale(3)'; } }, 650);
-    setTimeout(() => { const f = box.querySelector('.flash'); if (f) f.style.opacity = '0'; box.querySelectorAll('.fly').forEach(el => el.remove()); const o = box.querySelector('.out'); if (o) { o.style.opacity = '1'; o.style.transform = 'scale(1)'; } }, 1000);
-  }));
+  setTimeout(() => { const f = box.querySelector('.flash'); if (f) f.style.opacity = '0'; }, 500);
+}
+
+// ---------- AI Lab ----------
+function htmlAILab() {
+  const A = CONFIG.AI_LAB, ai = S.ai, C = CONFIG.CARDS;
+  const en = Array.from({ length: Math.max(A.energyMax, ai.energy) }, (_, i) => `<i class="${i < ai.energy ? (i >= A.energyMax ? 'on bonus' : 'on') : ''}"></i>`).join('');
+  const regen = ai.energy < A.energyMax ? `+1 in ${cd(S.time + A.regenMs - ai.acc)}` : 'full';
+  const bridge = AI_BRIDGE.connected() ? `<span class="good">connected to ${esc(AI_BRIDGE.endpoint)}</span>` : '<span class="warn">offline mode</span> — the AI is not connected yet; answers are saved on this device';
+  const m = AILAB;
+  if (!ai.consent) {
+    return `<div class="card hl"><h3>${ic('ai')} AI Lab — before you start</h3>
+      <div class="small" style="line-height:1.6">In the AI Lab, <b>your AI asks you questions in Romanian</b> and learns from your answers how real people speak and explain things. Answer in your own words.</div>
+      <ul class="small" style="line-height:1.6">
+        <li>What you write here is used <b>to teach the AI the Romanian language</b>.</li>
+        <li><b>Do not write personal data</b> (names, phone numbers, addresses, e-mails). Phone numbers, e-mails and links are removed automatically.</li>
+        <li>The AI only keeps an answer once several players agree on it.</li>
+        <li>You can delete your answers anytime (Settings → Delete my AI Lab answers).</li></ul>
+      <div class="small dim">Ce scrii în AI Lab este folosit ca AI-ul să învețe limba română. Te rog să nu scrii date personale.</div>
+      <div style="margin-top:12px">${btn('I understand — open the AI Lab', 'aiConsent', undefined, '', 'block primary big')}</div></div>`;
+  }
+  if (m && !m.done && m.i >= m.qs.length) return `<div class="card center" style="padding:20px">${ic('ai')} Saving your lesson…</div>`;
+  if (m && !m.done) {
+    const q = m.qs[m.i];
+    const chat = m.answers.map(a => `<div class="bot">${esc(a.q)}</div><div class="me">${a.a ? esc(a.a) : '<i class="dim">nu știu</i>'}</div>`).join('');
+    return `<div class="row between"><b>${ic('ai')} AI LESSON</b><span>Question <b>${m.i + 1}</b>/${m.qs.length}</span></div>
+      <div class="ai-chat">${chat}</div>
+      <div class="card hl"><div class="tiny dim">${q.kind === 'control' ? 'Quick check' : 'Your AI asks'}:</div><div class="ai-q">${esc(q.text)}</div>
+      <textarea class="ai-input" data-in="aiAnswer" maxlength="600" placeholder="Răspunde cu cuvintele tale…">${esc(UI.inputs.aiAnswer || '')}</textarea>
+      <div class="row" style="margin-top:8px;justify-content:flex-end">${btn('Nu știu', 'aiSkip', undefined, '', 'sm')}${btn(m.i === m.qs.length - 1 ? 'Send & finish' : 'Send', 'aiSend', undefined, '', 'primary')}</div>
+      <div class="tiny mute" style="margin-top:4px">Enter = send · Shift+Enter = new line · no personal data, please</div></div>`;
+  }
+  let last = '';
+  if (m && m.done && m.result) {
+    const r = m.result;
+    last = `<div class="card hl" style="margin-top:10px"><h4>Lesson complete</h4><div class="small">${r.useful} useful answer${r.useful === 1 ? '' : 's'}${r.controlOk ? '' : ' · <span class="warn">attention check missed: half rewards</span>'}</div>
+      <div style="margin-top:6px"><span class="cr">+${fmt(r.cr)} CR</span> · <span class="shardc">+${r.shards} shards</span> · <span class="good">+1 Neural Recalibrator</span>${r.milestone ? ' · <b class="warn">AI MILESTONE!</b>' : ''}</div>
+      ${r.unique ? `<div style="margin:12px auto 0;max-width:180px">${nftCard(r.unique)}</div><div class="center" style="color:#ffe14d"><b>UNIQUE CARD!</b></div>` : ''}
+      ${r.card ? `<div style="margin:12px auto 0;max-width:160px">${nftCard(r.card)}</div><div class="good small center">Card reward</div>` : ''}</div>`;
+  }
+  const toMs = A.milestoneEvery - (ai.useful % A.milestoneEvery);
+  return `<div class="card"><div class="row between"><h3 style="margin:0">${ic('ai')} AI Lab</h3><span class="energy">${en} <span class="tiny dim">${regen}</span></span></div>
+      <div class="small dim" style="margin-top:6px">Your AI asks ${A.questions} questions; you answer in your own words. Every lesson gives <b class="good">1 Neural Recalibrator</b> (reroll a card's bonus stats), CR and shards for useful answers, a ${Math.round(A.cardChance * 100)}% card chance and a small chance at a <b style="color:#ffe14d">UNIQUE</b> card — guaranteed after ${A.uniquePity} lessons without one.</div>
+      <div class="kv" style="margin:10px 0"><span>Energy</span><b>${ai.energy} <span class="dim tiny">(+1/h up to ${A.energyMax}; quiz wins add more, up to ${A.energyWonCap})</span></b><span>Lessons</span><b>${ai.rounds}</b><span>Useful answers taught</span><b class="good">${ai.useful}</b><span>Next AI milestone</span><b>${toMs} answers → +${A.milestoneShards} shards & Recalibrator</b><span>Unique pity</span><b>${ai.pity}/${A.uniquePity}</b><span>AI connection</span><b class="small">${bridge}</b></div>
+      ${btn(UI.aiBusy ? 'Connecting to the AI…' : 'Start a lesson (1 energy)', 'aiStart', undefined, UI.aiBusy ? 'Please wait' : whyAIStart(), 'block primary big')}</div>
+    ${last}
+    <div class="card" style="margin-top:10px"><h4>Your answers</h4><div class="small dim">${ai.collected.length} answers saved on this device${AI_BRIDGE.connected() ? '' : ', waiting for the AI to be connected'}.</div>
+      <div class="row" style="margin-top:6px">${btn('Export answers (JSON)', 'aiExport', undefined, ai.collected.length ? '' : 'No answers yet', 'sm accent')}</div></div>`;
 }
 
 // ============================================================
@@ -581,7 +634,7 @@ function appendLog(e) {
 // MOBILE NAV
 // ============================================================
 function htmlMnav() {
-  const it = [['left', 'AI', 'pet'], ['center', 'Play', 'arena'], ['right', 'Collect', 'nft'], ['log', 'Log', 'log']];
+  const it = [['left', 'AI', 'pet'], ['center', 'Play', 'arena'], ['right', 'Cards', 'nft'], ['log', 'Log', 'log']];
   return it.map(([v, l, i]) => `<button class="${UI.view === v ? 'on' : ''}" data-act="view" data-args='"${v}"'>${ic(i, 20)}${l}</button>`).join('');
 }
 
@@ -648,7 +701,7 @@ const HANDLERS = {
   centerTab(t) { UI.centerTab = t; },
   rightTab(t) { UI.rightTab = t; },
   marketTab(t) { UI.marketTab = t; },
-  chartTheme(t) { UI.chartTheme = t; },
+  chartType(t) { UI.chartType = t; },
   lbKind(k) { UI.lbKind = k; },
   logFilter(k) { UI.logFilter[k] = !UI.logFilter[k]; UI.lastHtml['#logwrap .panel'] = null; renderLogShell(); },
   dismissCrit() { UI.critDismissed = true; },
@@ -685,9 +738,22 @@ const HANDLERS = {
   equip(id) { doAct(() => actEquip(id)); openNftDetail(id); },
   unequip(id) { doAct(() => actUnequip(id)); openNftDetail(id); },
   toggleLock(id) { doAct(() => actToggleLock(id)); openNftDetail(id); },
+  upgradeCard(id) { const r = doAct(() => actUpgradeCard(id)); if (r && r.ok) openNftDetail(id); },
+  evolveCard(id) {
+    const c = S.inv.find(x => x.id === id); if (!c) return;
+    const k = evolveCost(c);
+    confirmBox('Evolve card?', `<b>${esc(cardLabel(c))}</b> becomes <b style="color:${rarityColor(c.rarity + 1)}">${rarityName(c.rarity + 1)} +0</b>: stronger base, ${CONFIG.CARDS.rarities[c.rarity + 1].bonus} bonus stat${CONFIG.CARDS.rarities[c.rarity + 1].bonus > 1 ? 's' : ''}, and it can be upgraded again.<div class="kv" style="margin-top:8px"><span>Cost</span><b class="cr">${cardCostText(k)}</b></div>`, 'Evolve', () => {
+      const r = doAct(() => actEvolveCard(id), true);
+      if (r && r.ok) playEvolveAnim(r.card);
+    });
+  },
+  rerollCard(id) {
+    const c = S.inv.find(x => x.id === id); if (!c) return;
+    confirmBox('Reroll bonus stats?', `All random bonus stats of <b>${esc(cardLabel(c))}</b> are replaced with new ones (the fixed main stat stays). Uses 1 Neural Recalibrator — you have ${S.player.recal}.`, 'Reroll', () => { const r = doAct(() => actRerollCard(id)); if (r && r.ok) openNftDetail(id); });
+  },
   salvageOne(id) {
     const n = S.inv.find(x => x.id === id); if (!n) return;
-    confirmBox('Salvage NFT?', `${esc(nftName(n))} L${n.level} will be destroyed for <b class="shardc">${salvageValue(n)} shards</b>.`, 'Salvage', () => { doAct(() => actSalvage([id])); UI.selected = UI.selected.filter(x => x !== id); }, true);
+    confirmBox('Salvage card?', `${esc(cardLabel(n))} will be destroyed for <b class="shardc">${salvageValue(n)} shards</b>.`, 'Salvage', () => { doAct(() => actSalvage([id])); UI.selected = UI.selected.filter(x => x !== id); }, true);
   },
   selectOne(id, noModal) {
     if (UI.selected.includes(id)) UI.selected = UI.selected.filter(x => x !== id);
@@ -697,26 +763,51 @@ const HANDLERS = {
   },
   toggleSelect() { UI.selectMode = !UI.selectMode; if (!UI.selectMode) UI.selected = []; },
   clearSel() { UI.selected = []; },
-  autoSet() {
-    const groups = {};
-    for (const n of S.inv) { if (nftStatusReason(n)) continue; const k = n.theme + ':' + n.level; (groups[k] = groups[k] || {})[n.slot] = groups[k][n.slot] || n; }
-    const keys = Object.keys(groups).filter(k => Object.keys(groups[k]).length === 5).sort((a, b) => Number(a.split(':')[1]) - Number(b.split(':')[1]));
-    if (!keys.length) { toast('No complete set of 5 free NFTs (same theme & level, one per slot).', 'err'); return; }
-    UI.selected = Object.values(groups[keys[0]]).map(n => n.id);
-    toast('Selected a fusable set: ' + themeById(keys[0].split(':')[0]).name + ' L' + keys[0].split(':')[1]);
-  },
-  fuseSelected() { confirmFusion(); },
+  selCommon() { UI.selected = S.inv.filter(c => c.rarity === 0 && !cardStatusReason(c)).map(c => c.id); toast(UI.selected.length + ' Common cards selected'); },
   salvageSelected() {
     const items = UI.selected.map(id => S.inv.find(n => n.id === id)).filter(Boolean);
-    const v = items.reduce((s, n) => s + salvageValue(n), 0);
-    confirmBox('Salvage selected?', `${items.length} NFT(s) will be destroyed for <b class="shardc">${v} shards</b>.`, 'Salvage', () => { const r = doAct(() => actSalvage(UI.selected)); if (r && r.ok) UI.selected = []; }, true);
+    const v = items.reduce((s2, n) => s2 + salvageValue(n), 0);
+    confirmBox('Salvage selected?', `${items.length} card(s) will be destroyed for <b class="shardc">${v} shards</b>.`, 'Salvage', () => { const r = doAct(() => actSalvage(UI.selected)); if (r && r.ok) UI.selected = []; }, true);
   },
-  shardBuy() {
-    const r = doAct(() => actShardBuy(UI.inputs.shardTheme || CONFIG.NFT.themes[0].id, Number(UI.inputs.shardSlot || 0)), true);
-    if (r && r.ok && r.nft) openNftDetail(r.nft.id);
+  forge() {
+    const r = doAct(() => actForge(UI.inputs.forgeType || CONFIG.CARDS.types[0].id), true);
+    if (r && r.ok && r.card) openNftDetail(r.card.id);
   },
+  // ---------- AI Lab ----------
+  aiConsent() { doAct(() => actAIConsent()); },
+  async aiStart() {
+    const why = whyAIStart(); if (why) { toast(why, 'err'); return; }
+    let qs = null, src = 'local';
+    if (AI_BRIDGE.connected()) {
+      UI.aiBusy = true; renderAll();
+      qs = await AI_BRIDGE.fetchQuestions(CONFIG.AI_LAB.questions, S.player.name);
+      UI.aiBusy = false;
+      if (qs) src = 'bridge'; else toast('The AI did not answer - using offline questions', 'warn');
+    }
+    UI.inputs.aiAnswer = '';
+    const r = doAct(() => actAIStart(qs, src), true);
+    if (r && r.ok) setPetState('thinking');
+    renderAll();
+    setTimeout(() => { const t = document.querySelector('textarea[data-in="aiAnswer"]'); if (t) t.focus(); }, 50);
+  },
+  aiSend() { aiSubmit(UI.inputs.aiAnswer || ''); },
+  aiSkip() { aiSubmit(''); },
+  aiExport() {
+    try {
+      const blob = new Blob([aiExportJSON()], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = 'cybernet-ai-answers.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      toast('Answers exported');
+    } catch (e) { toast('Export failed: ' + e.message, 'err'); }
+  },
+  aiDelete() {
+    confirmBox('Delete your AI Lab answers?', `All ${S.ai.collected.length} answers saved on this device will be deleted. Rewards you already received stay.`, 'Delete', () => { S.ai.collected = []; saveGame(); toast('Answers deleted'); }, true);
+  },
+  aiEndpoint() { AI_BRIDGE.setEndpoint(UI.inputs.aiEndpoint || ''); toast(AI_BRIDGE.connected() ? 'AI endpoint saved' : 'AI disconnected (offline mode)'); openSettings(); },
   listNft(id) {
-    const r = doAct(() => actListNFT(id, UI.inputs.sellPrice || fairValue(S.inv.find(n => n.id === id)), UI.inputs.sellVenue));
+    const r = doAct(() => actListCard(id, UI.inputs.sellPrice || fairValue(S.inv.find(n => n.id === id)), UI.inputs.sellVenue));
     if (r && r.ok) { UI.inputs.sellPrice = ''; closeModal(); }
   },
   cancelListing(id) { doAct(() => actCancelListing(id)); },
@@ -767,8 +858,12 @@ const HANDLERS = {
   dbgAdd(k) {
     const p = S.player;
     if (k === 'cr') addCR(100000, 'debug'); if (k === 'dt') p.dt += 100; if (k === 'land') p.land += 1000; if (k === 'shards') addShards(500);
-    if (k === 'nft') for (let i = 0; i < 5; i++) giveNFT(mintNFT({ theme: 'quantum', slot: i }), 'debug');
-    if (k === 'nftrand') for (let i = 0; i < 10; i++) giveNFT(mintNFT({}), 'debug');
+    if (k === 'nft') for (const t of CONFIG.CARDS.types) giveCard(mintCard({ type: t.id, rarity: 2 }), 'debug');
+    if (k === 'nftrand') for (let i = 0; i < 10; i++) giveCard(mintCard({}), 'debug');
+    if (k === 'unique') giveCard(mintCard({ rarity: CONFIG.CARDS.UNIQUE }), 'debug');
+    if (k === 'energy') S.ai.energy = CONFIG.AI_LAB.energyWonCap;
+    if (k === 'recal') p.recal += 5;
+    if (k === 'live') { if (typeof LiveQuiz !== 'undefined') LiveQuiz.refresh(true).then(() => toast('Live quiz: ' + LiveQuiz.pool.length + ' questions')); }
     if (k === 'rating') { p.rating += 100; updatePlayerLeague(); }
     if (k === 'crit') { S.server.botLand = Math.max(S.server.botLand, Math.ceil(S.server.total * 0.51) - (usedSpace() - S.server.botLand)); checkServerCapacity(); }
     if (k === 'season') { S.season.start = S.time - CONFIG.SEASON.lengthMs; }
@@ -786,6 +881,22 @@ const HANDLERS = {
     }, 30);
   },
 };
+function aiSubmit(text) {
+  const r = aiAnswer(text);
+  if (!r.ok) return;
+  UI.inputs.aiAnswer = '';
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); // let the panel re-render
+  if (r.last) {
+    const res = doAct(() => actAIFinish(), true);
+    if (res && res.ok) {
+      toast(res.unique ? 'UNIQUE CARD! Your AI thanks you.' : `Lesson complete: ${res.useful} useful answers`, res.unique ? 'warn' : '');
+      setPetState('correct', 1500);
+      if (AI_BRIDGE.connected() && AILAB && AILAB.batch) AI_BRIDGE.submitAnswers(S.player.name, AILAB.batch).then(sent => { if (!sent) toast('Could not reach the AI - answers kept on this device', 'warn'); });
+    }
+  }
+  renderAll();
+  setTimeout(() => { const t = document.querySelector('textarea[data-in="aiAnswer"]'); if (t) t.focus(); }, 30);
+}
 function renderLogShell() {
   const w = document.querySelector('#logwrap .panel');
   w.innerHTML = htmlLogShell();
@@ -797,6 +908,9 @@ function openSettings() {
     <div class="card"><h4>Save</h4><div class="small dim">Autosaves every ${CONFIG.AUTOSAVE_MS / 1000}s on this device${storageOk() ? '' : ' — <b class="bad">storage unavailable, progress will not be kept</b>'}. Export to move your game to another device.</div>
       <textarea id="savebox" rows="4" placeholder="Paste a save here to import" style="margin-top:8px"></textarea>
       <div class="row" style="margin-top:6px">${btn('Export', 'exportSave', undefined, '', 'accent')}${btn('Import', 'importSave')}${btn('Tutorial', 'tutorial', 0)}${btn('Developer tools', 'dbgOpen')}</div></div>
+    <div class="card"><h4>AI Lab</h4><div class="small dim">${S.ai.collected.length} answers saved on this device. AI connection: ${AI_BRIDGE.connected() ? '<b class="good">' + esc(AI_BRIDGE.endpoint) + '</b>' : '<b class="warn">offline</b>'}</div>
+      <div class="field" style="margin-top:6px"><input type="text" placeholder="AI address, e.g. http://localhost:8765 (empty = offline)" data-in="aiEndpoint" value="${esc(UI.inputs.aiEndpoint !== undefined ? UI.inputs.aiEndpoint : AI_BRIDGE.endpoint)}">${btn('Save', 'aiEndpoint', undefined, '', 'sm')}</div>
+      <div class="row" style="margin-top:6px">${btn('Export my answers', 'aiExport', undefined, S.ai.collected.length ? '' : 'No answers yet', 'sm')}${btn('Delete my AI Lab answers', 'aiDelete', undefined, S.ai.collected.length ? '' : 'No answers yet', 'sm danger')}</div></div>
     <div class="card"><h4>Game</h4><div class="kv"><span>Game time</span><b>${gameClock(S.time)}</b><span>Seed</span><b>${S.seed}</b><span>Version</span><b>${CONFIG.VERSION}</b></div>
       <div class="row" style="margin-top:8px">${btn('Reset game', 'resetGame', undefined, '', 'danger')}</div></div></div>`);
 }
@@ -807,7 +921,7 @@ function openDebug() {
   const infl = e.lastHour.burned ? (e.lastHour.minted / e.lastHour.burned).toFixed(2) : '∞';
   openModal(modalHead('Debug panel') + `<div class="col">
     <div class="row"><span class="small">Time speed:</span>${[1, 10, 100].map(x => `<button class="chip ${UI.speed === x ? 'on' : ''}" data-act="dbgSpeed" data-args="${x}">x${x}</button>`).join('')}${btn('+1 hour', 'dbgAdd', 'hour', '', 'sm')}</div>
-    <div class="row">${[['cr', '+100K CR'], ['dt', '+100 DT'], ['land', '+1000 SU'], ['shards', '+500 shards'], ['nft', '+Quantum set'], ['nftrand', '+10 NFTs'], ['rating', '+100 rating'], ['stamina', 'Full stamina'], ['crit', 'Force critical'], ['season', 'End season']].map(([k, l]) => btn(l, 'dbgAdd', k, '', 'sm')).join('')}</div>
+    <div class="row">${[['cr', '+100K CR'], ['dt', '+100 DT'], ['land', '+1000 SU'], ['shards', '+500 shards'], ['nft', '+Rare rig (4 types)'], ['nftrand', '+10 cards'], ['unique', '+1 Unique'], ['recal', '+5 Recalibrators'], ['energy', 'AI energy max'], ['live', 'Refresh live quiz'], ['rating', '+100 rating'], ['stamina', 'Full stamina'], ['crit', 'Force critical'], ['season', 'End season']].map(([k, l]) => btn(l, 'dbgAdd', k, '', 'sm')).join('')}</div>
     <div class="card"><h4>Economy</h4><div class="kv"><span>CR minted total</span><b>${fmt(e.minted)}</b><span>CR burned total</span><b>${fmt(e.burned)}</b><span>Last hour minted / burned</span><b>${fmt(e.lastHour.minted)} / ${fmt(e.lastHour.burned)}</b><span>Inflation indicator (minted/burned)</span><b class="${infl > 2 ? 'warn' : 'good'}">${infl}</b><span>Art cache</span><b>${Art.cacheSize()}</b><span>Bot listings</span><b>${S.market.listings.length}</b></div></div>
     <div class="card"><div class="row between"><h4 style="margin:0">Self-tests</h4>${btn('Run tests', 'dbgTests', undefined, '', 'sm primary')}</div><div id="dbgtests" style="margin-top:6px"></div></div></div>`, true);
 }
@@ -817,7 +931,8 @@ const TUTORIAL = [
   ['Welcome to CyberNet', `You run a tiny <b>AI pet</b> in a simulated cyberpunk network full of other players. Spend <b class="dtc">Data Tokens</b> (DT) to train its <b>Math IQ</b>, <b>Trivia DB</b> and <b>Processing speed</b>. DT refill by +1 every 30 s (stock up to 50 — log in regularly!).`],
   ['Stands & land', `Build <b>Training Stands</b> (x2 → x10) on your <b class="landc">land</b> to multiply training. Stands cost CR and hourly upkeep; higher tiers need higher leagues. Land comes from the <b>Global Server</b> — its price rises as space fills up.`],
   ['The Arena', `<b>Solo</b>: your AI vs the clock, 3 lives, 10 rounds. <b>Multiplayer</b>: pay an entry fee, compete live, the prize pool is split by score. Hit <b style="color:var(--c)">HUMAN OVERRIDE</b> (2 per match) to answer a question yourself — fast and right = max points. Win rating to climb leagues.`],
-  ['NFTs & fusion', `Top finishes drop unique <b>NFTs</b> — every one is drawn from its own DNA. Equip up to 10 for bonuses; equip a full 5-piece set of one theme and level to multiply them. <b>Fuse</b> 5 of the same theme & level (one per slot) into the next level. Bonuses have caps, so there is always a best build to hunt for.`],
+  ['Cards', `Top finishes drop <b>cards</b> of 4 types: <b>Core</b>, <b>Virtual Memory</b>, <b>Hardware</b> and <b>Cooler</b>, each drawn from its own DNA. Equip one of each for a set bonus — but Core and Hardware heat up the rig, so you need a good Cooler. <b>Upgrade</b> a card from +0 to +4 with CR and shards, then <b>evolve</b> it: Common → Uncommon → Rare → Epic → Legendary.`],
+  ['The AI Lab', `In the <b>AI Lab</b> your AI asks you questions in Romanian and learns from your answers. Every lesson gives a <b>Neural Recalibrator</b> (reroll a card's bonus stats), CR, shards, a card chance and a small chance at a <b style="color:#ffe14d">UNIQUE</b> card. Energy refills +1 per hour; quiz wins give extra.`],
   ['Guilds, market & the server', `Join a <b>guild</b>: it earns a 10% bonus from members' winnings to build an HQ and unlock styles. Trade NFTs on the <b>market</b> or open your own stand for commissions. When the Global Server drops below 50% free space, heavy building freezes and the net expands. Good luck, operator.`],
 ];
 function showTutorial(step) {
@@ -833,7 +948,7 @@ function showAwaySummary(before, ms) {
     ['Time simulated', fmtTime(ms)],
     ['Credits', `${d(before.cr, S.player.cr) >= 0 ? '+' : ''}${fmt(d(before.cr, S.player.cr))} CR`],
     ['Data Tokens', `+${Math.max(0, d(before.dt, S.player.dt))} DT`],
-    ['NFTs sold', d(before.sold, counter('nftSold'))],
+    ['Cards sold', d(before.sold, counter('cardSold') + counter('nftSold'))],
     ['Stand commissions', `+${fmt(d(before.comm, S.market.standEarned))} CR`],
     ['Server expansions', d(before.exp, S.server.expansions)],
   ];
@@ -875,6 +990,7 @@ function bindEvents() {
     if (e.key === 'Escape' && UI.modalOpen) closeModal();
     if (e.key === '`' && !/INPUT|TEXTAREA/.test((document.activeElement || {}).tagName)) openDebug();
     if (e.key === 'Enter' && document.activeElement && document.activeElement.dataset.in === 'donate') HANDLERS.donate();
+    if (e.key === 'Enter' && !e.shiftKey && document.activeElement && document.activeElement.dataset.in === 'aiAnswer') { e.preventDefault(); HANDLERS.aiSend(); }
   });
   onLog = appendLog;
 }

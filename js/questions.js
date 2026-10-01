@@ -63,12 +63,14 @@ function genMath(diff) {
 function genTrivia(diff, usedInMatch) {
   const d = clamp(Math.round(diff), 1, 10);
   const recent = new Set(S.recentTrivia);
+  // built-in bank + today's live questions from Wikidata (if they could be downloaded)
+  const BANK = typeof LiveQuiz !== 'undefined' && LiveQuiz.pool.length ? TRIVIA.concat(LiveQuiz.pool) : TRIVIA;
   let pool = [];
   for (let spread = 0; spread <= 9 && pool.length === 0; spread++) {
-    pool = TRIVIA.filter(q => Math.abs(q.diff - d) <= spread && !usedInMatch.has(q.id) && !recent.has(q.id));
+    pool = BANK.filter(q => Math.abs(q.diff - d) <= spread && !usedInMatch.has(q.id) && !recent.has(q.id));
   }
-  if (pool.length === 0) pool = TRIVIA.filter(q => !usedInMatch.has(q.id));
-  if (pool.length === 0) pool = TRIVIA;
+  if (pool.length === 0) pool = BANK.filter(q => !usedInMatch.has(q.id));
+  if (pool.length === 0) pool = BANK;
   const q = pick(pool);
   usedInMatch.add(q.id);
   S.recentTrivia.push(q.id);

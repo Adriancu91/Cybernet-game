@@ -300,3 +300,28 @@ table.lb td.num { text-align: right; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .blink { visibility: visible; }
 }
+
+/* ---------- v2: cards & AI Lab ---------- */
+.slots .card-fan, .nft-detail .card-fan, .fusion-fx .card-fan { animation: spin 3.5s linear infinite; }
+.card-slots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.card-slot { display: flex; flex-direction: column; gap: 4px; }
+.card-slot .slot-empty { aspect-ratio: 1 / 1.16; display: flex; align-items: center; justify-content: center; text-align: center; padding: 4px; }
+.card-slot .slot-name { font-size: 10px; color: var(--dim); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.heatbar { height: 8px; border-radius: 4px; background: #132033; overflow: hidden; margin: 4px 0; }
+.heatbar i { display: block; height: 100%; background: linear-gradient(90deg, #6ab8ff, #39ff88); }
+.heatbar i.over { background: linear-gradient(90deg, #ffb020, #ff3b5c); }
+.stat-line { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px dashed var(--line); font-size: 12px; }
+.stat-line.main b { color: var(--c); }
+.album { display: grid; grid-template-columns: 90px repeat(6, minmax(0, 1fr)); gap: 4px; font-size: 11px; align-items: center; }
+.album .cell { border: 1px solid var(--line); border-radius: 4px; text-align: center; padding: 6px 2px; color: var(--mute); }
+.album .cell.on { color: #000; font-weight: 700; }
+.ai-q { font-size: 17px; line-height: 1.5; margin: 10px 0; }
+.ai-chat { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.ai-chat .me { align-self: flex-end; background: #10241a; border: 1px solid var(--a); border-radius: 10px 10px 2px 10px; padding: 6px 10px; max-width: 85%; font-size: 13px; }
+.ai-chat .bot { align-self: flex-start; background: #0d1a2a; border: 1px solid var(--b); border-radius: 10px 10px 10px 2px; padding: 6px 10px; max-width: 85%; font-size: 13px; }
+.energy i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; margin-right: 3px; border: 1px solid var(--b); vertical-align: middle; }
+.energy i.on { background: var(--b); box-shadow: 0 0 6px var(--b); }
+.energy i.bonus { background: var(--warn); border-color: var(--warn); }
+.unique-glow { animation: pulse 1.6s ease-in-out infinite; }
+textarea.ai-input { width: 100%; min-height: 70px; resize: vertical; }
+@media (max-width: 760px) { .album { grid-template-columns: 70px repeat(6, minmax(0, 1fr)); font-size: 10px; } }

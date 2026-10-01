@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const files = ['config', 'core', 'data', 'questions', 'sim', 'nft', 'guild', 'market', 'meta', 'arena', 'actions', 'art', 'tests'];
+const files = ['config', 'core', 'data', 'questions', 'sim', 'cards', 'ai_bridge', 'ailab', 'guild', 'market', 'meta', 'arena', 'actions', 'art', 'tests'];
 const ctx = { console, Date, Math, JSON, btoa: s => Buffer.from(s, 'binary').toString('base64'), atob: s => Buffer.from(s, 'base64').toString('binary'), escape, unescape, encodeURIComponent, decodeURIComponent, localStorage: undefined };
 vm.createContext(ctx);
 for (const f of files) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', f + '.js'), 'utf8'), ctx, { filename: f + '.js' });
