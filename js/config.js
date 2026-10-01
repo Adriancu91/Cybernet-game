@@ -70,6 +70,19 @@ const CONFIG = {
     plots: [10, 50, 100, 500, 1000],
     heavyPlot: 100,            // plots > this freeze during critical
   },
+  // ---------- exploring your land ----------
+  EXPLORE: {
+    tileSU: 10,                // every 10 SU you own = 1 unexplored tile
+    pageSize: 200,             // tiles shown per page
+    // one-time reward per tile (fixed amounts, so buying land just to explore never pays off)
+    table: [
+      { kind: 'dt',     weight: 40, min: 2,  max: 8 },
+      { kind: 'cr',     weight: 35, min: 15, max: 90 },
+      { kind: 'shards', weight: 17, min: 1,  max: 5 },
+      { kind: 'nft',    weight: 4 },
+      { kind: 'jackpot', weight: 4, min: 200, max: 600 },
+    ],
+  },
   SERVER: {
     startTotal: 30000,
     startUsedRatio: 0.30,

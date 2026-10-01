@@ -342,10 +342,28 @@ function htmlLand() {
     <div class="card"><h3>Your land</h3><div class="kv"><span>Owned</span><b class="landc">${fmt(S.player.land)} SU</b><span>Training stands</span><b>${fmt(S.stands.reduce((s, x) => s + CONFIG.STAND_TIERS[x.tier].land, 0))} SU</b><span>Marketplace stand</span><b>${S.market.stand ? fmt(CONFIG.MARKET.standLand) : 0} SU</b><span>Free to build</span><b class="good">${fmt(landFree())} SU</b></div>
       <h4 style="margin-top:10px">Buy a plot</h4><div class="plot-grid">${plots}</div></div>
   </div>
+  ${htmlTerritory()}
   <div class="card" style="margin-top:10px"><h4>Cyberspace map</h4>${landCache.html}
     <div class="legend"><span><i style="background:var(--c)"></i>You</span><span><i style="background:var(--b)"></i>Guilds</span><span><i style="background:#35506e"></i>Other players</span><span><i style="background:#132033"></i>Free</span></div></div>
   <div class="card" style="margin-top:10px"><h4>Total vs used space (game hours)</h4>${Art.lineChart([{ points: hist, color: getCss('--b') }, { points: hu, color: getCss('--warn'), fill: true }], { h: 120, zero: true })}
     <div class="legend"><span><i style="background:var(--b)"></i>Total</span><span><i style="background:var(--warn)"></i>Used</span></div></div>`;
+}
+const TILE_ICON = { d: ['dt', 'var(--dt)'], c: ['cr', 'var(--cr)'], s: ['shard', 'var(--shard)'], n: ['nft', 'var(--c)'], j: ['cr', 'var(--warn)'] };
+function htmlTerritory() {
+  const n = tileCount(), ex = tilesExplored(), E = CONFIG.EXPLORE;
+  const pages = Math.max(1, Math.ceil(n / E.pageSize));
+  UI.tilePage = clamp(UI.tilePage || 0, 0, pages - 1);
+  const from = UI.tilePage * E.pageSize, to = Math.min(n, from + E.pageSize);
+  let tiles = '';
+  for (let i = from; i < to; i++) {
+    const k = S.player.tiles[i];
+    if (k) { const [icn, col] = TILE_ICON[k] || TILE_ICON.d; tiles += `<div class="tile done ${k === 'j' || k === 'n' ? 'rare' : ''}" style="color:${col}" title="Sector #${i + 1} explored">${ic(icn, 14)}</div>`; }
+    else tiles += `<button class="tile fog" data-act="explore" data-args="${i}" title="Explore sector #${i + 1}">?</button>`;
+  }
+  const pager = pages > 1 ? `<div class="row" style="margin-top:8px">${Array.from({ length: pages }, (_, p) => `<button class="chip ${p === UI.tilePage ? 'on' : ''}" data-act="tilePage" data-args="${p}">${p * E.pageSize + 1}-${Math.min(n, (p + 1) * E.pageSize)}</button>`).join('')}</div>` : '';
+  return `<div class="card" style="margin-top:10px"><div class="row between"><h3 style="margin:0">${ic('land')} Your territory</h3><span class="small">${ex}/${n} explored</span></div>
+    <div class="tiny dim" style="margin:4px 0 8px">Every ${E.tileSU} SU you own is a sector. Tap a <b style="color:var(--a)">?</b> sector to explore it once: DT, CR, shards, a rare NFT or a CR jackpot. Buy more land to get new sectors.</div>
+    ${n ? `<div class="tiles">${tiles}</div>${pager}<div class="row" style="margin-top:8px">${btn('Explore all', 'exploreAll', undefined, ex >= n ? 'Nothing left to explore - buy more land' : '', 'sm accent')}</div>` : `<div class="empty">You own less than ${E.tileSU} SU. Buy a plot to get sectors.</div>`}</div>`;
 }
 function getCss(v) { try { return getComputedStyle(document.body).getPropertyValue(v).trim() || '#39ff88'; } catch (e) { return '#39ff88'; } }
 
@@ -713,6 +731,12 @@ const HANDLERS = {
   upgradeHQ() { doAct(() => actUpgradeHQ()); },
   buyCosmetic(id) { doAct(() => actBuyCosmetic(id)); },
   useCosmetic(id) { doAct(() => actUseCosmetic(id)); UI.lastHtml = {}; Art.clear(); },
+  explore(i) {
+    const r = doAct(() => actExplore(i), true);
+    if (r && r.ok) toast('Sector #' + (i + 1) + ': ' + r.msg, r.kind === 'nft' || r.kind === 'jackpot' ? 'warn' : '');
+  },
+  exploreAll() { doAct(() => actExploreAll()); },
+  tilePage(p) { UI.tilePage = p; },
   claimMission(i) { doAct(() => actClaimMission(i)); },
   rebirth() {
     confirmBox('Neural Rebirth?', `Your pet stats, stands and rating reset. You gain <b class="good">+${legacyGain()} Legacy</b> (permanent bonus). NFTs, land, CR, guild and cosmetics are kept.`, 'Rebirth', () => doAct(() => actRebirth()), true);

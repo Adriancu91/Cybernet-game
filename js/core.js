@@ -70,7 +70,7 @@ function newState(seed) {
       math: st.math, trivia: st.trivia, speedPoints: st.speedPoints,
       rating: st.rating, league: 0, peakLeague: 0,
       stamina: CONFIG.SOLO.staminaMax, staminaAcc: 0, dtAcc: 0,
-      dtBuys: [], trainCdUntil: 0, guildId: null, guildLeftAt: -Infinity,
+      dtBuys: [], trainCdUntil: 0, tiles: {}, guildId: null, guildLeftAt: -Infinity,
       legacy: 0, rebirths: 0, ascensions: 0,
       cosmetics: { owned: ['theme_classic', 'font_default', 'badge_none'], theme: 'theme_classic', font: 'font_default', badge: 'badge_none' },
       titles: [], title: '',

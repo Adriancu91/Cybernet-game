@@ -59,7 +59,7 @@ function runSelfTests(opts) {
     let now = 1e6;
     const N = opts.quick ? 2000 : 10000;
     for (let i = 0; i < N; i++) {
-      const r = randInt(0, 30);
+      const r = randInt(0, 34);
       const inv = S.inv;
       const anyNft = () => inv.length ? pick(inv).id : 'none';
       switch (r) {
@@ -96,6 +96,8 @@ function runSelfTests(opts) {
         case 25: if (chance(0.05)) { S.player.rating = 1750; updatePlayerLeague(); actRebirth(); } break;
         case 26: actToggleLock(anyNft()); break;
         case 27: if (chance(0.2)) actCreateGuild('Test Guild ' + randInt(1, 999)); break;
+        case 29: actExplore(randInt(0, tileCount() + 2)); break;
+        case 30: if (chance(0.05)) actExploreAll(20); break;
         case 28: S.player.rating = clamp(S.player.rating + randInt(-50, 80), 800, 2000); updatePlayerLeague(); break;
         default: simulate(randInt(1, 120) * 1000);
       }
@@ -240,6 +242,20 @@ function runSelfTests(opts) {
     assert(S.econ.offline, 'structures should be offline');
     addCR(1e6);
     assert(!S.econ.offline && S.econ.debt === 0, 'debt not repaid');
+  });
+
+  test('Land sectors can be explored only once', () => {
+    fresh(77);
+    S.player.land = 50;
+    assert(tileCount() === 5, 'tile count ' + tileCount());
+    assert(actExplore(0).ok, 'first explore failed');
+    assert(!actExplore(0).ok, 'explored twice');
+    assert(!actExplore(5).ok && !actExplore(-1).ok, 'explored outside land');
+    const r = actExploreAll();
+    assert(r.ok && tilesExplored() === 5, 'explore all');
+    assert(!actExploreAll().ok, 'explore all repeated');
+    S.player.land = 70;
+    assert(tileCount() - tilesExplored() === 2, 'new land should add new sectors');
   });
 
   return results;

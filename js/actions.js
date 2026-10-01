@@ -361,3 +361,45 @@ function actSetName(name) {
   S.player.name = name;
   return ok('Name set');
 }
+
+// ---------- exploring land tiles ----------
+function tileCount() { return Math.floor(S.player.land / CONFIG.EXPLORE.tileSU); }
+function tilesExplored() { return Object.keys(S.player.tiles || {}).length; }
+function whyExplore(i) {
+  if (!Number.isInteger(i) || i < 0 || i >= tileCount()) return 'Tile not on your land';
+  if (S.player.tiles[i]) return 'Already explored';
+  return '';
+}
+function actExplore(i) {
+  i = Number(i);
+  const r = whyExplore(i); if (r) return fail(r);
+  const T = CONFIG.EXPLORE.table;
+  const e = T[weightedIndex(T.map(x => x.weight))];
+  let text = '', kind = e.kind;
+  if (kind === 'dt') text = `+${addDT(randInt(e.min, e.max))} DT`;
+  else if (kind === 'cr') text = `+${fmt(addCR(randInt(e.min, e.max), 'explore'))} CR`;
+  else if (kind === 'shards') text = `+${addShards(randInt(e.min, e.max))} shards`;
+  else if (kind === 'jackpot') text = `JACKPOT +${fmt(addCR(randInt(e.min, e.max), 'explore'))} CR`;
+  else {
+    const n = giveNFT(mintNFT({}), 'land exploration');
+    if (n) text = `NFT: ${nftName(n)} [${CONFIG.NFT.rarities[n.rarity].name}]`;
+    else { kind = 'dt'; text = `+${addDT(5)} DT (inventory full)`; }
+  }
+  S.player.tiles[i] = kind[0];
+  count('tilesExplored');
+  if (kind === 'nft' || kind === 'jackpot') log('SYSTEM', `Exploring sector #${i + 1}: ${text}`);
+  return Object.assign(ok(text), { kind });
+}
+function actExploreAll(max) {
+  const n = tileCount(), got = { dt: 0, cr: 0, shards: 0, nft: 0, j: 0 };
+  let done = 0;
+  const crBefore = S.player.cr, dtBefore = S.player.dt, shBefore = S.player.shards;
+  for (let i = 0; i < n && done < (max || 1e9); i++) {
+    if (S.player.tiles[i]) continue;
+    const r = actExplore(i);
+    if (r.ok) { done++; if (r.kind === 'nft') got.nft++; if (r.kind === 'jackpot') got.j++; }
+  }
+  if (!done) return fail('Nothing left to explore - buy more land');
+  log('SYSTEM', `Explored ${done} sectors.`);
+  return ok(`Explored ${done}: +${fmt(S.player.cr - crBefore)} CR, +${S.player.dt - dtBefore} DT, +${S.player.shards - shBefore} shards${got.nft ? `, ${got.nft} NFT` : ''}${got.j ? `, ${got.j} jackpot` : ''}`);
+}

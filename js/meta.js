@@ -75,6 +75,8 @@ const ACHIEVEMENTS = [
   ['market_buy', 'Shopper', 'Buy an NFT on the market', () => counter('nftBought') >= 1],
   ['market_sell', 'Merchant', 'Sell an NFT on the market', () => counter('nftSold') >= 1],
   ['market_stand', 'Trade Baron', 'Build a Marketplace Stand', () => !!S.market.stand],
+  ['explore_10', 'Scout', 'Explore 10 land sectors', () => counter('tilesExplored') >= 10],
+  ['explore_100', 'Cartographer', 'Explore 100 land sectors', () => counter('tilesExplored') >= 100],
   ['land_1000', 'Landlord', 'Own 1,000 SU of land', () => S.player.land >= 1000],
   ['expansion', 'Witness', 'See a global server expansion', () => counter('expansions') >= 1],
   ['cr_100k', 'Six Figures', 'Earn 100K CR in total', () => counter('crEarned') >= 1e5],
