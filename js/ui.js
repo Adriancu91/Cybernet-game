@@ -94,6 +94,7 @@ function htmlTop() {
     <span class="pill landc" title="Your land: free / owned">${ic('land')}<b>${fmt(landFree())}</b><span class="dim tiny">/${fmt(p.land)}</span></span>
     <span class="pill shardc" title="Shards">${ic('shard')}<b>${fmt(p.shards)}</b></span>
     <span class="pill league-pill" style="color:${L.color};border-color:${L.color}" title="League & rating">${ic('rating')}${L.name} <span class="dim">${p.rating}</span></span>
+    ${CLOUD.enabled() ? `<button class="pill acct-pill ${CLOUD.loggedIn() ? (CLOUD.status === 'conflict' || CLOUD.status === 'error' ? 'warn' : 'good') : ''}" data-act="openAccount" title="Cloud account">☁ ${CLOUD.loggedIn() ? esc(CLOUD.acct.user) + (CLOUD.status === 'conflict' ? ' !' : '') : 'Log in'}</button>` : ''}
     <button class="iconbtn" data-act="openSettings" aria-label="Settings">${GEAR}</button>
   </div>`;
 }
@@ -848,7 +849,7 @@ const HANDLERS = {
   },
   resetGame() {
     confirmBox('Reset the game?', 'This deletes your progress on this device. Export your save first if you want to keep it.', 'Yes, continue', () => {
-      confirmBox('Are you absolutely sure?', '<b class="bad">Everything will be lost.</b>', 'DELETE EVERYTHING', () => { wipeSave(); S = newState(); ARENA = null; saveGame(); UI.lastHtml = {}; UI.lastResult = null; renderLogShell(); log('SYSTEM', 'New game started.'); showTutorial(0); }, true);
+      confirmBox('Are you absolutely sure?', '<b class="bad">Everything will be lost.</b>', 'DELETE EVERYTHING', () => { wipeSave(); if (CLOUD.loggedIn()) CLOUD.logout(); S = newState(); ARENA = null; saveGame(); UI.lastHtml = {}; UI.lastResult = null; renderLogShell(); log('SYSTEM', 'New game started.'); showTutorial(0); }, true);
     }, true);
   },
   tutorial(step) { showTutorial(step); },
@@ -881,6 +882,104 @@ const HANDLERS = {
     }, 30);
   },
 };
+// ============================================================
+// ACCOUNT (ID + PIN cloud save)
+// ============================================================
+function fmtAgo(ms) { if (!ms) return 'never'; const s = Math.round((Date.now() - ms) / 1000); return s < 60 ? s + 's ago' : s < 3600 ? Math.round(s / 60) + ' min ago' : Math.round(s / 3600) + ' h ago'; }
+function openAccount(msg) {
+  UI.modalKind = { type: 'account' };
+  const err = msg ? `<div class="${msg.ok ? 'good' : 'bad'} small" style="margin-bottom:8px">${esc(msg.text)}</div>` : '';
+  if (!CLOUD.enabled()) {
+    openModal(modalHead('Account') + `<div class="small">Cloud accounts are not enabled on this server yet. Your progress is saved on this device; use Settings → Export to move it.</div>`);
+    return;
+  }
+  if (!CLOUD.loggedIn()) {
+    openModal(modalHead('☁ Your account') + err + `<div class="small dim" style="margin-bottom:10px">Choose an <b>ID</b> and a <b>PIN</b> — no e-mail, no confirmation. With them you can continue your game on any phone or computer.</div>
+      <div class="col"><input type="text" maxlength="20" autocomplete="username" placeholder="ID (3-20 letters/digits)" data-in="acctUser" value="${esc(UI.inputs.acctUser || '')}">
+      <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="current-password" placeholder="PIN (4-8 digits)" data-in="acctPin" value="${esc(UI.inputs.acctPin || '')}"></div>
+      <div class="row" style="margin-top:10px">${btn('Log in', 'acctLogin', undefined, UI.acctBusy ? 'Please wait' : '', 'primary')}${btn('Create account', 'acctRegister', undefined, UI.acctBusy ? 'Please wait' : '', 'accent')}</div>
+      <div class="tiny mute" style="margin-top:8px">Remember your PIN: there is no e-mail to recover it. Don't use a PIN you use for your bank or phone. 5 wrong PINs lock the account for 15 minutes.</div>`);
+    return;
+  }
+  const a = CLOUD.acct, st = CLOUD.status;
+  const stTxt = st === 'conflict' ? '<b class="warn">Another device saved newer progress</b>' : st === 'error' ? `<b class="bad">${esc(CLOUD.errText(CLOUD.lastError))}</b>` : st === 'syncing' ? 'syncing…' : '<b class="good">saved</b>';
+  const conflict = st === 'conflict' ? `<div class="card hl" style="margin-top:10px"><h4>Which progress do you keep?</h4><div class="small dim">This account was saved from another device after this one last synced.</div>
+      <div class="row" style="margin-top:8px">${btn('Load the cloud progress', 'acctLoadCloud', undefined, '', 'primary')}${btn('Keep this device (overwrite cloud)', 'acctForce', undefined, '', 'danger')}</div></div>` : '';
+  openModal(modalHead('☁ ' + esc(a.user)) + err + `<div class="kv"><span>Status</span><span>${stTxt}</span><span>Last cloud save</span><b>${fmtAgo(a.lastSync)}</b><span>Save version</span><b>${a.version || 0}</b></div>${conflict}
+    <div class="row" style="margin-top:12px">${btn('Save now', 'acctSync', undefined, UI.acctBusy || st === 'conflict' ? 'Resolve the conflict first' : '', 'primary')}${btn('Log out', 'acctLogout', undefined, '', '')}</div>
+    <div class="card" style="margin-top:12px"><h4>Change PIN</h4><div class="row"><input type="password" inputmode="numeric" maxlength="8" placeholder="new PIN" data-in="acctNewPin" style="flex:1;width:auto">${btn('Change', 'acctChangePin', undefined, '', 'sm')}</div></div>
+    <div class="row" style="margin-top:10px">${btn('Delete account', 'acctDelete', undefined, '', 'sm danger')}</div>`);
+}
+async function acctRun(fn) {
+  if (UI.acctBusy) return null;
+  UI.acctBusy = true;
+  let r;
+  try { r = await fn(); } catch (e) { r = { ok: false, error: e.message }; }
+  UI.acctBusy = false;
+  renderAll();
+  return r;
+}
+function adoptSave(st) {
+  S = st; ARENA = null; AILAB = null;
+  saveGame(); UI.lastHtml = {}; UI.lastResult = null;
+  renderLogShell(); renderAll();
+}
+Object.assign(HANDLERS, {
+  openAccount() { openAccount(); },
+  async acctRegister() {
+    const r = await acctRun(() => CLOUD.register(UI.inputs.acctUser, UI.inputs.acctPin));
+    if (!r) return;
+    if (r.ok) { UI.inputs.acctPin = ''; S.tutorialStep = Math.max(S.tutorialStep || 0, 0); saveGame(); openAccount({ ok: true, text: 'Account created! Your progress is now saved in the cloud.' }); log('SYSTEM', `Cloud account "${CLOUD.acct.user}" created.`); }
+    else openAccount({ ok: false, text: CLOUD.errText(r.error) });
+  },
+  async acctLogin() {
+    const r = await acctRun(() => CLOUD.login(UI.inputs.acctUser, UI.inputs.acctPin));
+    if (!r) return;
+    if (!r.ok) { openAccount({ ok: false, text: CLOUD.errText(r.error) }); return; }
+    UI.inputs.acctPin = '';
+    if (r.save) {
+      adoptSave(r.save);
+      closeModal();
+      toast('Welcome back, ' + CLOUD.acct.user + '! Progress loaded from the cloud.');
+      CLOUD.lastSavedTime = S.time; CLOUD.status = 'ok';
+    } else {
+      await acctRun(() => CLOUD.sync(true));
+      openAccount({ ok: true, text: 'Logged in. This account was empty, so the progress of this device was saved to it.' });
+    }
+  },
+  async acctSync() { const r = await acctRun(() => CLOUD.sync(false)); if (r) openAccount(r.ok ? { ok: true, text: 'Saved.' } : { ok: false, text: CLOUD.errText(r.error) }); },
+  async acctForce() {
+    confirmBox('Overwrite the cloud?', 'The progress saved from the other device will be replaced by the progress on this device.', 'Overwrite', async () => { const r = await acctRun(() => CLOUD.sync(true)); openAccount(r && r.ok ? { ok: true, text: 'Cloud overwritten with this device.' } : { ok: false, text: CLOUD.errText(r ? r.error : 'network') }); }, true);
+  },
+  async acctLoadCloud() {
+    const a = CLOUD.acct;
+    const r = await acctRun(() => CLOUD.login(a.user, a.pin));
+    if (r && r.ok && r.save) { adoptSave(r.save); CLOUD.lastSavedTime = S.time; CLOUD.status = 'ok'; closeModal(); toast('Cloud progress loaded'); }
+    else openAccount({ ok: false, text: CLOUD.errText(r ? r.error : 'network') });
+  },
+  acctLogout() {
+    confirmBox('Log out?', 'This device stops saving to your account. Your progress stays safe in the cloud; log in again anytime with your ID and PIN.', 'Log out', () => { CLOUD.logout(); toast('Logged out'); });
+  },
+  async acctChangePin() {
+    const r = await acctRun(() => CLOUD.changePin(CLOUD.acct.pin, String(UI.inputs.acctNewPin || '').trim()));
+    UI.inputs.acctNewPin = '';
+    openAccount(r && r.ok ? { ok: true, text: 'PIN changed.' } : { ok: false, text: CLOUD.errText(r ? r.error : 'network') });
+  },
+  acctDelete() {
+    confirmBox('Delete your account?', 'The cloud copy of your progress and your AI Lab answers are deleted for good. The game on this device stays.', 'Delete account', async () => {
+      const r = await acctRun(() => CLOUD.deleteAccount(CLOUD.acct.pin));
+      toast(r && r.ok ? 'Account deleted' : CLOUD.errText(r ? r.error : 'network'), r && r.ok ? '' : 'err');
+    }, true);
+  },
+  welcomeGuest() { closeModal(); showTutorial(S.tutorialStep || 0); },
+  welcomeAccount() { openAccount(); },
+});
+// first launch on a new device: offer to log in before the tutorial
+function showWelcome() {
+  openModal(modalHead('Welcome to CyberNet') + `<div class="small" style="line-height:1.6">Do you already have an account? Log in with your <b>ID</b> and <b>PIN</b> to continue your game. New here? Create one in seconds — no e-mail needed — or just play as a guest (progress saved on this device only).</div>
+    <div class="col" style="margin-top:12px">${btn('Log in / create account', 'welcomeAccount', undefined, '', 'block primary big')}${btn('Play as guest', 'welcomeGuest', undefined, '', 'block')}</div>`);
+}
+
 function aiSubmit(text) {
   const r = aiAnswer(text);
   if (!r.ok) return;
@@ -891,6 +990,7 @@ function aiSubmit(text) {
     if (res && res.ok) {
       toast(res.unique ? 'UNIQUE CARD! Your AI thanks you.' : `Lesson complete: ${res.useful} useful answers`, res.unique ? 'warn' : '');
       setPetState('correct', 1500);
+      if (CLOUD.loggedIn() && AILAB && AILAB.batch) CLOUD.sendAIAnswers(AILAB.batch);
       if (AI_BRIDGE.connected() && AILAB && AILAB.batch) AI_BRIDGE.submitAnswers(S.player.name, AILAB.batch).then(sent => { if (!sent) toast('Could not reach the AI - answers kept on this device', 'warn'); });
     }
   }
@@ -908,6 +1008,8 @@ function openSettings() {
     <div class="card"><h4>Save</h4><div class="small dim">Autosaves every ${CONFIG.AUTOSAVE_MS / 1000}s on this device${storageOk() ? '' : ' — <b class="bad">storage unavailable, progress will not be kept</b>'}. Export to move your game to another device.</div>
       <textarea id="savebox" rows="4" placeholder="Paste a save here to import" style="margin-top:8px"></textarea>
       <div class="row" style="margin-top:6px">${btn('Export', 'exportSave', undefined, '', 'accent')}${btn('Import', 'importSave')}${btn('Tutorial', 'tutorial', 0)}${btn('Developer tools', 'dbgOpen')}</div></div>
+    <div class="card"><h4>Account</h4><div class="small dim">${CLOUD.enabled() ? (CLOUD.loggedIn() ? `Logged in as <b class="good">${esc(CLOUD.acct.user)}</b> — progress is saved in the cloud.` : 'Not logged in — progress is saved on this device only.') : 'Cloud accounts are not enabled on this server yet — progress is saved on this device only. Use Export to move it.'}</div>
+      ${CLOUD.enabled() ? `<div class="row" style="margin-top:6px">${btn(CLOUD.loggedIn() ? 'Manage account' : 'Log in / create account', 'openAccount', undefined, '', 'sm primary')}</div>` : ''}</div>
     <div class="card"><h4>AI Lab</h4><div class="small dim">${S.ai.collected.length} answers saved on this device. AI connection: ${AI_BRIDGE.connected() ? '<b class="good">' + esc(AI_BRIDGE.endpoint) + '</b>' : '<b class="warn">offline</b>'}</div>
       <div class="field" style="margin-top:6px"><input type="text" placeholder="AI address, e.g. http://localhost:8765 (empty = offline)" data-in="aiEndpoint" value="${esc(UI.inputs.aiEndpoint !== undefined ? UI.inputs.aiEndpoint : AI_BRIDGE.endpoint)}">${btn('Save', 'aiEndpoint', undefined, '', 'sm')}</div>
       <div class="row" style="margin-top:6px">${btn('Export my answers', 'aiExport', undefined, S.ai.collected.length ? '' : 'No answers yet', 'sm')}${btn('Delete my AI Lab answers', 'aiDelete', undefined, S.ai.collected.length ? '' : 'No answers yet', 'sm danger')}</div></div>

@@ -118,7 +118,7 @@ function actAIStart(questions, source) {
 }
 function aiAnswer(text) {
   const m = AILAB;
-  if (!m || m.done) return { ok: false };
+  if (!m || m.done || m.i >= m.qs.length) return { ok: false };
   const q = m.qs[m.i];
   m.answers.push({ id: q.id, kind: q.kind, q: q.text, a: aiSanitize(text) });
   m.i++;

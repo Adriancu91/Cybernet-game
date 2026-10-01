@@ -23,6 +23,7 @@
 
   function boot() {
     if (typeof AI_BRIDGE !== 'undefined') AI_BRIDGE.init();
+    if (typeof CLOUD !== 'undefined') CLOUD.init();
     if (typeof LiveQuiz !== 'undefined') LiveQuiz.load();
     const loaded = loadGame();
     let isNew = false;
@@ -40,7 +41,9 @@
     }
     UI.view = window.innerWidth < 768 ? 'left' : UI.view;
     renderAll();
-    if (S.tutorialStep < TUTORIAL.length && !UI.modalOpen) showTutorial(S.tutorialStep || 0);
+    if (isNew && CLOUD.enabled() && !CLOUD.loggedIn()) showWelcome();
+    else if (S.tutorialStep < TUTORIAL.length && !UI.modalOpen) showTutorial(S.tutorialStep || 0);
+    if (!isNew && CLOUD.loggedIn()) CLOUD.sync(false).then(() => renderAll());
     if (/[?&]debug=1/.test(location.search)) openDebug();
     requestAnimationFrame(frame);
     setInterval(tick, 250);
@@ -60,7 +63,7 @@
     if (steps >= 400) acc = 0;
     if (steps > 0) renderAll();
     else updateCountdowns();
-    if (Date.now() - lastSave >= CONFIG.AUTOSAVE_MS) { saveGame(); lastSave = Date.now(); }
+    if (Date.now() - lastSave >= CONFIG.AUTOSAVE_MS) { saveGame(); lastSave = Date.now(); CLOUD.autoSync(); }
   }
 
   // arena runs on animation frames for a smooth timer
@@ -97,7 +100,7 @@
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { hiddenAt = Date.now(); saveGame(); }
+    if (document.hidden) { hiddenAt = Date.now(); saveGame(); if (CLOUD.loggedIn() && !CLOUD.conflict) CLOUD.sync(false); }
     else if (hiddenAt) {
       const away = Date.now() - hiddenAt;
       hiddenAt = null;

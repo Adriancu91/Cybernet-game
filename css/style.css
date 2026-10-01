@@ -325,3 +325,7 @@ table.lb td.num { text-align: right; }
 .unique-glow { animation: pulse 1.6s ease-in-out infinite; }
 textarea.ai-input { width: 100%; min-height: 70px; resize: vertical; }
 @media (max-width: 760px) { .album { grid-template-columns: 70px repeat(6, minmax(0, 1fr)); font-size: 10px; } }
+
+.acct-pill { cursor: pointer; font: inherit; background: transparent; color: var(--dim); }
+.acct-pill.good { color: var(--good); border-color: var(--good); }
+.acct-pill.warn { color: var(--warn); border-color: var(--warn); }
