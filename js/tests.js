@@ -68,7 +68,7 @@ function runSelfTests(opts) {
     let now = 1e6;
     const N = opts.quick ? 2000 : 10000;
     for (let i = 0; i < N; i++) {
-      const r = randInt(0, 36);
+      const r = randInt(0, 38);
       const inv = S.inv;
       const anyNft = () => inv.length ? pick(inv).id : 'none';
       switch (r) {
@@ -95,6 +95,8 @@ function runSelfTests(opts) {
           break;
         }
         case 32: if (chance(0.3)) S.player.recal += 1; addAIEnergy(1); break;
+        case 33: actClaimDaily('2026-10-' + String(randInt(1, 28)).padStart(2, '0')); actRescue(); break;
+        case 34: if (actStartPractice().ok) { while (!PRACTICE.done) practiceAnswer(pick(PRACTICE.qs[PRACTICE.i].options)); } break;
         case 14: actJoinGuild(pick(S.guilds).id); break;
         case 15: if (chance(0.1)) actLeaveGuild(); break;
         case 16: actDonate(randInt(1, 5000)); break;
@@ -203,6 +205,33 @@ function runSelfTests(opts) {
     actAIFinish();
     assert(counter('uniqueGot') === u0 + 1 && S.ai.pity === 0, 'pity did not give a Unique');
     assert(addAIEnergy(100) <= CONFIG.AI_LAB.energyWonCap && S.ai.energy === CONFIG.AI_LAB.energyWonCap, 'energy cap broken');
+  });
+
+  test('Income: daily streak, free practice and emergency credits', () => {
+    fresh(12);
+    const cr0 = S.player.cr;
+    assert(actClaimDaily('2026-10-01').ok && S.player.daily.streak === 1, 'day 1');
+    assert(!actClaimDaily('2026-10-01').ok, 'claimed twice the same day');
+    assert(actClaimDaily('2026-10-02').ok && S.player.daily.streak === 2, 'streak did not grow');
+    assert(actClaimDaily('2026-10-05').ok && S.player.daily.streak === 1, 'streak not reset after a missed day');
+    assert(S.player.cr > cr0, 'no CR from daily');
+    // practice: no stamina or CR needed, rewards per correct answer, cooldown
+    S.player.stamina = 0; S.player.cr = 0;
+    assert(actStartPractice().ok, 'practice should not need stamina or CR');
+    while (!PRACTICE.done) practiceAnswer(PRACTICE.qs[PRACTICE.i].answer);
+    assert(PRACTICE.correct === CONFIG.INCOME.practiceQuestions && S.player.cr === PRACTICE.cr && PRACTICE.cr > 0, 'practice rewards wrong');
+    assert(!actStartPractice().ok, 'practice cooldown ignored');
+    simulate(CONFIG.INCOME.practiceCooldownMs + 1000);
+    assert(actStartPractice().ok, 'practice not available after cooldown');
+    // rescue only when broke, then cooldown
+    S.player.cr = multiFee() + 10;
+    assert(!actRescue().ok, 'rescue while able to pay');
+    S.player.cr = 0;
+    assert(actRescue().ok && S.player.cr === rescueAmount(), 'rescue failed');
+    S.player.cr = 0;
+    assert(!actRescue().ok, 'rescue cooldown ignored');
+    PRACTICE = null;
+    invariants('income');
   });
 
   test('v1 NFT saves are converted to cards', () => {

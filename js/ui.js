@@ -167,7 +167,7 @@ function htmlLeft() {
 function htmlCenter() {
   const tabs = [['arena', 'Arena', 'arena'], ['ai', 'AI Lab', 'ai'], ['market', 'Market', 'market'], ['land', 'Land', 'land'], ['season', 'Season', 'season']];
   const unclaimed = S.missions.list.filter(m => m.progress >= m.target && !m.claimed).length;
-  const t = tabs.map(([id, label, icn]) => `<button class="tab ${UI.centerTab === id ? 'on' : ''}" data-act="centerTab" data-args='"${id}"'>${ic(icn)} ${label}${id === 'season' && unclaimed ? ` <span class="badge-n">${unclaimed}</span>` : ''}${id === 'arena' && arenaBusy() ? ' <span class="dot blink" style="width:7px;height:7px"></span>' : ''}${id === 'ai' && S.ai.energy > 0 ? ` <span class="badge-n">${S.ai.energy}</span>` : ''}</button>`).join('');
+  const t = tabs.map(([id, label, icn]) => `<button class="tab ${UI.centerTab === id ? 'on' : ''}" data-act="centerTab" data-args='"${id}"'>${ic(icn)} ${label}${id === 'season' && unclaimed ? ` <span class="badge-n">${unclaimed}</span>` : ''}${id === 'arena' && arenaBusy() ? ' <span class="dot blink" style="width:7px;height:7px"></span>' : ''}${id === 'ai' && S.ai.energy > 0 ? ` <span class="badge-n">${S.ai.energy}</span>` : ''}${id === 'arena' && !dailyInfo(todayStr()).claimed ? ' <span class="badge-n">!</span>' : ''}</button>`).join('');
   let body = '';
   if (UI.centerTab === 'arena') body = htmlArena();
   else if (UI.centerTab === 'ai') body = htmlAILab();
@@ -188,7 +188,15 @@ function htmlArena() {
   const stam = Array.from({ length: CONFIG.SOLO.staminaMax }, (_, i) => `<i class="${i < p.stamina ? 'on' : ''}"></i>`).join('');
   const regen = p.stamina < CONFIG.SOLO.staminaMax ? `+1 in ${cd(S.time + CONFIG.SOLO.staminaRegenMs - p.staminaAcc)}` : 'full';
   const pool = (n) => L.fee * n + L.house;
-  return `<div class="card league-card"><div class="league-emblem" style="color:${L.color};border-color:${L.color}">${L.name[0]}</div>
+  const dly = dailyInfo(todayStr()), I = CONFIG.INCOME;
+  const daily = dly.claimed
+    ? `<div class="small"><b class="good">Daily bonus claimed</b> · ${dly.streak} day${dly.streak > 1 ? 's' : ''} in a row · come back tomorrow for day ${dly.streak + 1}</div>`
+    : `<div class="row between"><div class="small"><b class="warn">DAILY BONUS</b> · day ${dly.streak}${dly.streak > 1 ? ' in a row' : ''}<div class="tiny dim">Come back every day: rewards grow for 7 days, then the cycle repeats.</div></div>${btn(`Claim +${fmt(dly.cr)} CR · +${dly.dt} DT${dly.shards ? ' · +' + dly.shards + ' shards' : ''}`, 'claimDaily', undefined, '', 'primary')}</div>`;
+  const rescue = S.player.cr < multiFee() ? `<div class="card hl" style="margin-top:10px"><div class="row between"><div class="small"><b class="warn">Low on credits?</b><div class="tiny dim">Emergency credits when you can't pay the Multiplayer fee (every ${I.rescueCooldownMs / 3600000}h).</div></div>${btn(`Get +${fmt(rescueAmount())} CR`, 'rescue', undefined, whyRescue(), 'accent')}</div></div>` : '';
+  const income = `<div class="card ${dly.claimed ? '' : 'hl'}">${daily}</div>
+  <div class="card" style="margin-top:10px"><div class="row between"><div class="small"><b>Free practice</b> — you answer ${I.practiceQuestions} questions yourself<div class="tiny dim">No stamina, no fee: +${fmt(I.practiceCRPerCorrect * L.reward)} CR per correct answer · every ${I.practiceCooldownMs / 60000} min</div></div>${btn('Practice', 'startPractice', undefined, whyPractice(), 'accent')}</div></div>
+  ${rescue}`;
+  return `${income}<div class="card league-card" style="margin-top:10px"><div class="league-emblem" style="color:${L.color};border-color:${L.color}">${L.name[0]}</div>
     <div class="grow"><div class="row between"><b style="color:${L.color}">${L.name.toUpperCase()} LEAGUE</b><span>Rating <b>${p.rating}</b></span></div>
     ${nx ? `<div class="xp" style="margin:6px 0"><i style="width:${(prog * 100).toFixed(0)}%"></i></div><div class="tiny dim">${nx.min - p.rating > 0 ? nx.min - p.rating : 0} rating to ${nx.name} · questions difficulty ${L.diff[0]}-${L.diff[1]} · ${L.roundMs / 1000}s rounds</div>` : '<div class="tiny good">Top league reached — Neural Rebirth available in Season tab.</div>'}</div></div>
   <div class="card" style="margin-top:10px"><div class="row between"><b class="warn">EVENT: ${ev.name}</b><span class="tiny dim">ends in ${cd(S.time + ev.endsIn)}</span></div><div class="small dim">${ev.desc}${ev.id === 'double_drops' ? ' — featured: ' + ev.featured.name : ''}</div></div>
@@ -882,6 +890,31 @@ const HANDLERS = {
     }, 30);
   },
 };
+// ============================================================
+// FREE PRACTICE (you answer yourself)
+// ============================================================
+function openPractice() {
+  const m = PRACTICE;
+  if (!m) return;
+  UI.modalKind = { type: 'practice' };
+  const fb = m.last ? `<div class="${m.last.right ? 'good' : 'bad'} small" style="margin-bottom:8px">${m.last.right ? '✓ Correct!' : '✗ Wrong — the answer was <b>' + esc(m.last.answer) + '</b>'}</div>` : '';
+  if (m.done) {
+    openModal(modalHead('Free practice') + fb + `<div class="center" style="padding:10px"><div class="result-big">${m.correct}/${m.qs.length}</div><div class="cr" style="margin-top:6px">+${fmt(m.cr)} CR</div></div>
+      <div class="row" style="justify-content:center">${btn('Done', 'closeModal', undefined, '', 'primary')}</div>`);
+    return;
+  }
+  const q = m.qs[m.i];
+  openModal(modalHead(`Free practice · ${m.i + 1}/${m.qs.length}`) + fb + `<div class="tiny dim">${q.kind === 'math' ? 'MATH' : 'TRIVIA · ' + esc(q.cat).toUpperCase()} · difficulty ${q.diff}/10</div>
+    <div class="qtext" style="margin:10px 0">${esc(q.text)}</div>
+    <div class="opts">${q.options.map(o => `<button class="opt live" data-act="practiceAnswer" data-args="${esc(JSON.stringify(o))}">${esc(o)}</button>`).join('')}</div>`);
+}
+Object.assign(HANDLERS, {
+  claimDaily() { doAct(() => actClaimDaily(todayStr())); },
+  rescue() { doAct(() => actRescue()); },
+  startPractice() { const r = doAct(() => actStartPractice(), true); if (r && r.ok) openPractice(); },
+  practiceAnswer(o) { practiceAnswer(o); openPractice(); if (PRACTICE && PRACTICE.done) saveGame(); },
+});
+
 // ============================================================
 // ACCOUNT (ID + PIN cloud save)
 // ============================================================

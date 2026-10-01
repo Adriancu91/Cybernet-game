@@ -75,6 +75,8 @@ function newState(seed) {
       cosmetics: { owned: ['theme_classic', 'font_default', 'badge_none'], theme: 'theme_classic', font: 'font_default', badge: 'badge_none' },
       titles: [], title: '',
       recal: 0,                // Neural Recalibrators: reroll a card's bonus stats
+      daily: { last: '', streak: 0 },
+      practiceUntil: 0, rescueUntil: -Infinity,
     },
     album: {},                 // 'type:rarity' -> first time obtained
     ai: { energy: 1, acc: 0, pity: 0, rounds: 0, useful: 0, milestone: 0, consent: false, collected: [] },

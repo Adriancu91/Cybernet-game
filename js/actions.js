@@ -404,3 +404,76 @@ function actExploreAll(max) {
   log('SYSTEM', `Explored ${done} sectors.`);
   return ok(`Explored ${done}: +${fmt(S.player.cr - crBefore)} CR, +${S.player.dt - dtBefore} DT, +${S.player.shards - shBefore} shards${got.card ? `, ${got.card} card${got.card > 1 ? 's' : ''}` : ''}${got.j ? `, ${got.j} jackpot` : ''}`);
 }
+
+// ---------- always-available income ----------
+function todayStr(d) { d = d || new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function dayDiff(a, b) { return Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000); }
+function dailyInfo(today) {
+  const dl = S.player.daily, I = CONFIG.INCOME;
+  const claimed = dl.last === today;
+  const cont = dl.last && dayDiff(dl.last, today) === 1;
+  const streak = claimed ? dl.streak : (cont ? dl.streak + 1 : 1);
+  const i = (streak - 1) % I.daily.length;
+  const L = CONFIG.LEAGUES[S.player.league];
+  return { claimed, streak, cr: I.daily[i] * L.reward, shards: I.dailyShards[i], dt: I.dailyDT[i], dayInCycle: i + 1 };
+}
+function actClaimDaily(today) {
+  today = today || todayStr();
+  const d = dailyInfo(today);
+  if (d.claimed) return fail('Already claimed today - come back tomorrow');
+  S.player.daily = { last: today, streak: d.streak };
+  addCR(d.cr, 'daily'); addShards(d.shards); addDT(d.dt);
+  count('dailyClaims');
+  log('SYSTEM', `Daily bonus (day ${d.streak} in a row): +${fmt(d.cr)} CR, +${d.dt} DT${d.shards ? ', +' + d.shards + ' shards' : ''}.`);
+  return ok(`Day ${d.streak}: +${fmt(d.cr)} CR, +${d.dt} DT${d.shards ? ', +' + d.shards + ' shards' : ''}`);
+}
+
+// free practice: YOU answer (no stamina, no fee), small CR per correct answer
+let PRACTICE = null; // not saved
+function whyPractice() {
+  if (PRACTICE && !PRACTICE.done) return 'Practice already running';
+  const cd = S.player.practiceUntil - S.time;
+  if (cd > 0) return 'Next free practice in ' + fmtTime(cd);
+  return '';
+}
+function actStartPractice() {
+  const r = whyPractice(); if (r) return fail(r);
+  const used = new Set(), n = CONFIG.INCOME.practiceQuestions;
+  const qs = [];
+  for (let i = 0; i < n; i++) qs.push(genQuestion(S.player.league, used, questionMode()));
+  PRACTICE = { qs, i: 0, correct: 0, last: null, done: false, cr: 0 };
+  S.player.practiceUntil = S.time + CONFIG.INCOME.practiceCooldownMs;
+  return ok('Practice started');
+}
+function practiceAnswer(choice) {
+  const m = PRACTICE;
+  if (!m || m.done || m.i >= m.qs.length) return fail('No practice running');
+  const q = m.qs[m.i], right = checkAnswer(q, choice);
+  if (right) m.correct++;
+  m.last = { choice, right, answer: q.answer };
+  m.i++;
+  if (m.i >= m.qs.length) {
+    m.done = true;
+    m.cr = addCR(m.correct * CONFIG.INCOME.practiceCRPerCorrect * CONFIG.LEAGUES[S.player.league].reward, 'practice');
+    count('practiceRuns');
+    log('ARENA', `Free practice: ${m.correct}/${m.qs.length} correct, +${fmt(m.cr)} CR.`);
+  }
+  return ok(right ? 'Correct!' : 'Wrong - the answer was ' + q.answer);
+}
+
+// emergency credits: only when you cannot afford a Multiplayer entry fee
+function rescueAmount() { return multiFee() * CONFIG.INCOME.rescueMult; }
+function whyRescue() {
+  if (S.player.cr >= multiFee()) return 'Only available when you cannot pay the Multiplayer entry fee';
+  const cd = S.player.rescueUntil - S.time;
+  if (cd > 0) return 'Available again in ' + fmtTime(cd);
+  return '';
+}
+function actRescue() {
+  const r = whyRescue(); if (r) return fail(r);
+  const n = addCR(rescueAmount(), 'rescue');
+  S.player.rescueUntil = S.time + CONFIG.INCOME.rescueCooldownMs;
+  count('rescues');
+  log('SYSTEM', `Emergency credits: +${fmt(n)} CR.`);
+  return ok(`+${fmt(n)} CR emergency credits`);
+}

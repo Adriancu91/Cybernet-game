@@ -221,6 +221,18 @@ const CONFIG = {
     album: { entryShards: 5, columnShards: [20, 40, 80, 160, 320, 640], columnRecal: 1 },
   },
 
+  // ---------- always-available income (nobody gets stuck without CR) ----------
+  INCOME: {
+    daily: [100, 150, 200, 250, 300, 400, 600],     // CR x league reward, by streak day 1..7 (then repeats)
+    dailyShards: [0, 0, 5, 0, 10, 0, 25],
+    dailyDT: [5, 5, 10, 10, 15, 15, 25],
+    practiceQuestions: 5,
+    practiceCRPerCorrect: 15,                        // x league reward; you answer yourself, no stamina, no fee
+    practiceCooldownMs: 10 * 60000,
+    rescueMult: 2,                                   // emergency credits = 2 x Multiplayer entry fee
+    rescueCooldownMs: 4 * 3600000,
+  },
+
   // ---------- AI Lab (training rounds with the real AI) ----------
   AI_LAB: {
     energyMax: 3,
