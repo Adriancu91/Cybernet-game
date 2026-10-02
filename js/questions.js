@@ -1,6 +1,6 @@
 'use strict';
 /* ============================================================
-   QUESTIONS — math generator (difficulty 1-10) + trivia picker
+   QUESTIONS — generator de calcule (dificultate 1-10) + alegerea întrebărilor de cultură generală
    ============================================================ */
 
 function mathDistractors(ans) {
@@ -39,7 +39,7 @@ function genMath(diff) {
       break;
     }
     case 6: { const a = randInt(2, 9), x = randInt(1, 15), b = randInt(1, 30); text = `${a}x + ${b} = ${a * x + b}, x = ?`; ans = x; break; }
-    case 7: { const p = pick([5, 10, 15, 20, 25, 30, 40, 50, 75]), n = randInt(2, 40) * 20; text = `${p}% of ${n}`; ans = Math.round(p * n / 100); break; }
+    case 7: { const p = pick([5, 10, 15, 20, 25, 30, 40, 50, 75]), n = randInt(2, 40) * 20; text = `${p}% din ${n}`; ans = Math.round(p * n / 100); break; }
     case 8: {
       if (chance(0.5)) { const a = randInt(11, 25); text = `${a}²`; ans = a * a; }
       else { const a = randInt(6, 15), b = randInt(6, 15), c = randInt(2, 9), d2 = randInt(2, 9); text = `${a} × ${b} − ${c} × ${d2}`; ans = a * b - c * d2; }
@@ -47,7 +47,7 @@ function genMath(diff) {
     }
     case 9: {
       if (chance(0.5)) { const x = randInt(-12, 20), a = randInt(3, 9), c = randInt(1, a - 1), b = randInt(-20, 20); const rhs = (a - c) * x + b; text = `${a}x ${b >= 0 ? '+' : '−'} ${Math.abs(b)} = ${c}x + ${rhs}, x = ?`; ans = x; }
-      else { const n = randInt(4, 40) * 10, p = pick([10, 20, 25, 50]); const up = chance(0.5); text = `${n} ${up ? 'increased' : 'decreased'} by ${p}%`; ans = Math.round(n * (up ? 1 + p / 100 : 1 - p / 100)); }
+      else { const n = randInt(4, 40) * 10, p = pick([10, 20, 25, 50]); const up = chance(0.5); text = `${n} ${up ? 'mărit' : 'micșorat'} cu ${p}%`; ans = Math.round(n * (up ? 1 + p / 100 : 1 - p / 100)); }
       break;
     }
     default: {
@@ -57,13 +57,13 @@ function genMath(diff) {
       else { const a = randInt(2, 6), b = randInt(2, 5), c = randInt(10, 99); text = `${a}^${b} + ${c}`; ans = Math.pow(a, b) + c; }
     }
   }
-  return { kind: 'math', cat: 'Math', diff: d, text: text + ' = ?', answer: String(ans), options: mathDistractors(ans) };
+  return { kind: 'math', cat: 'Matematică', diff: d, text: text + ' = ?', answer: String(ans), options: mathDistractors(ans) };
 }
 
 function genTrivia(diff, usedInMatch) {
   const d = clamp(Math.round(diff), 1, 10);
   const recent = new Set(S.recentTrivia);
-  // built-in bank + today's live questions from Wikidata (if they could be downloaded)
+  // banca internă + întrebările live de azi din Wikidata (dacă au putut fi descărcate)
   const BANK = typeof LiveQuiz !== 'undefined' && LiveQuiz.pool.length ? TRIVIA.concat(LiveQuiz.pool) : TRIVIA;
   let pool = [];
   for (let spread = 0; spread <= 9 && pool.length === 0; spread++) {

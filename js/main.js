@@ -32,8 +32,8 @@
     bindEvents();
     renderLogShell();
     if (isNew) {
-      log('SYSTEM', 'Welcome, operator. Your AI pet is online. Train it, then enter the Arena.');
-      log('SERVER', `Global Net online: ${fmt(S.server.total)} SU capacity, ${fmtPct(usedRatio() * 100)} used.`);
+      log('SYSTEM', 'Bine ai venit, operatorule. AI-ul tău este online. Antrenează-l, apoi intră în Arenă.');
+      log('SERVER', `Rețeaua globală este online: capacitate ${fmt(S.server.total)} SU, ${fmtPct(usedRatio() * 100)} ocupat.`);
       saveGame();
     } else {
       const away = Date.now() - (S.realTs || Date.now());
@@ -86,11 +86,11 @@
     if (justDone) {
       const r = m.result || {};
       UI.lastResult = m.type === 'solo'
-        ? `Solo ${r.win ? '<span class="good">WON</span>' : '<span class="bad">failed</span>'} — ${r.correct}/${r.rounds} correct, <span class="cr">+${fmt(r.cr)} CR</span>`
-        : `Multiplayer #${r.place}/${r.of} — <span class="cr">+${fmt(r.cr)} CR</span>, rating ${r.ratingDelta >= 0 ? '+' : ''}${r.ratingDelta}`;
-      if (r.loot && r.loot.length) UI.lastResult += ` · loot: ${r.loot.map(l => esc(l.text)).join(', ')}`;
+        ? `Solo ${r.win ? '<span class="good">CÂȘTIGAT</span>' : '<span class="bad">eșuat</span>'} — ${r.correct}/${r.rounds} corecte, <span class="cr">+${fmt(r.cr)} CR</span>`
+        : `Multiplayer, locul ${r.place}/${r.of} — <span class="cr">+${fmt(r.cr)} CR</span>, rating ${r.ratingDelta >= 0 ? '+' : ''}${r.ratingDelta}`;
+      if (r.loot && r.loot.length) UI.lastResult += ` · pradă: ${r.loot.map(l => esc(l.text)).join(', ')}`;
       setPetState(r.win || r.place === 1 ? 'correct' : 'idle', 1500);
-      if (UI.centerTab !== 'arena') toast('Match finished: ' + UI.lastResult.replace(/<[^>]+>/g, ''));
+      if (UI.centerTab !== 'arena') toast('Meci încheiat: ' + UI.lastResult.replace(/<[^>]+>/g, ''));
     }
     lastPhase = m.phase;
     if (m.phase !== 'done') {

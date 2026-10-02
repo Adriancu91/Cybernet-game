@@ -5,18 +5,24 @@
    ============================================================ */
 
 // ---------- missions ----------
+// Romanian counting: "1 carte", "5 cărți", "20 de cărți" ("de" when the last two digits are 0 or >= 20)
+function metaRoCount(n, one, many) {
+  if (n === 1) return '1 ' + one;
+  const r = n % 100;
+  return n + ((r === 0 && n > 0) || r >= 20 ? ' de ' : ' ') + many;
+}
 const MISSION_TYPES = [
-  { type: 'train',      text: n => `Train your AI ${n} times`,               target: () => 20 },
-  { type: 'solo_win',   text: n => `Win ${n} Solo Arena run`,                target: () => 1 },
-  { type: 'multi_play', text: n => `Play ${n} Multiplayer matches`,          target: () => 2 },
-  { type: 'multi_top3', text: n => `Finish top 3 in Multiplayer ${n} time`,  target: () => 1 },
-  { type: 'earn',       text: n => `Earn ${fmt(n)} CR`,                      target: () => 800 * CONFIG.LEAGUES[S.player.league].reward },
-  { type: 'buy_card',   text: n => `Buy ${n} card from the market`,          target: () => 1 },
-  { type: 'override',   text: n => `Answer ${n} Human Override correctly`,   target: () => 1 },
-  { type: 'donate',     text: n => `Donate ${fmt(n)} CR to your guild`,      target: () => 200 },
-  { type: 'salvage',    text: n => `Salvage ${n} cards into shards`,         target: () => 2 },
-  { type: 'upgrade',    text: n => `Upgrade cards ${n} times`,               target: () => 2 },
-  { type: 'ai_round',   text: n => `Teach your AI in the AI Lab ${n} time`,  target: () => 1 },
+  { type: 'train',      text: n => `Antrenează-ți AI-ul de ${metaRoCount(n, 'dată', 'ori')}`, target: () => 20 },
+  { type: 'solo_win',   text: n => `Câștigă ${metaRoCount(n, 'rundă', 'runde')} în Arena Solo`, target: () => 1 },
+  { type: 'multi_play', text: n => `Joacă ${metaRoCount(n, 'meci', 'meciuri')} Multiplayer`, target: () => 2 },
+  { type: 'multi_top3', text: n => `Termină în top 3 la Multiplayer de ${metaRoCount(n, 'dată', 'ori')}`, target: () => 1 },
+  { type: 'earn',       text: n => `Câștigă ${fmt(n)} CR`, target: () => 800 * CONFIG.LEAGUES[S.player.league].reward },
+  { type: 'buy_card',   text: n => `Cumpără ${metaRoCount(n, 'carte', 'cărți')} de pe Piață`, target: () => 1 },
+  { type: 'override',   text: n => `Răspunde corect la ${metaRoCount(n, 'Intervenție umană', 'Intervenții umane')}`, target: () => 1 },
+  { type: 'donate',     text: n => `Donează ${fmt(n)} CR breslei tale`, target: () => 200 },
+  { type: 'salvage',    text: n => `Reciclează ${metaRoCount(n, 'carte', 'cărți')} în fragmente`, target: () => 2 },
+  { type: 'upgrade',    text: n => `Îmbunătățește cărți de ${metaRoCount(n, 'dată', 'ori')}`, target: () => 2 },
+  { type: 'ai_round',   text: n => `Învață-ți AI-ul în Laboratorul AI de ${metaRoCount(n, 'dată', 'ori')}`, target: () => 1 },
 ];
 function ensureMissions() {
   const d = gameDay();
@@ -29,67 +35,67 @@ function ensureMissions() {
     return { type: t.type, text: t.text(target), target, progress: 0, claimed: false,
       reward: { dt: 20, cr: 150 * L.reward, shards: 10 } };
   });
-  if (S.time > 1000) log('SYSTEM', 'New daily missions are available.');
+  if (S.time > 1000) log('SYSTEM', 'Au apărut misiuni zilnice noi.');
 }
 function missionProgress(type, n) {
   if (!S.missions || !S.missions.list) return;
   for (const m of S.missions.list) {
     if (m.type === type && m.progress < m.target) {
       m.progress = Math.min(m.target, m.progress + n);
-      if (m.progress >= m.target) log('SYSTEM', `Mission complete: ${m.text} - claim your reward!`);
+      if (m.progress >= m.target) log('SYSTEM', `Misiune îndeplinită: ${m.text} - revendică-ți recompensa!`);
     }
   }
 }
 
 // ---------- achievements ----------
 const ACHIEVEMENTS = [
-  ['first_train', 'Hello World', 'Train your AI once', () => counter('trains') >= 1],
-  ['train_100', 'Gradient Descent', 'Train 100 times', () => counter('trains') >= 100],
-  ['train_1000', 'Deep Learning', 'Train 1,000 times', () => counter('trains') >= 1000],
-  ['stand_1', 'Foundation', 'Build a Training Stand', () => S.stands.length >= 1],
-  ['stand_3', 'Campus', 'Own 3 Training Stands', () => S.stands.length >= 3],
-  ['stand_x6', 'Overclocked', 'Upgrade a stand to x6', () => S.stands.some(s => s.tier >= 2)],
-  ['stand_x10', 'Supercomputer', 'Upgrade a stand to x10', () => S.stands.some(s => s.tier >= 4)],
-  ['solo_1', 'Solo Survivor', 'Win a Solo Arena run', () => counter('soloWins') >= 1],
-  ['solo_10', 'Lone Wolf', 'Win 10 Solo Arena runs', () => counter('soloWins') >= 10],
-  ['solo_perfect', 'Flawless', 'Win a Solo run with 10/10 correct', () => counter('soloPerfect') >= 1],
-  ['multi_1', 'Lobby Rat', 'Play a Multiplayer match', () => counter('multiPlayed') >= 1],
-  ['multi_win', 'Champion', 'Finish 1st in Multiplayer', () => counter('multiWins') >= 1],
-  ['multi_win10', 'Dynasty', 'Finish 1st in Multiplayer 10 times', () => counter('multiWins') >= 10],
-  ['override_1', 'Human After All', 'Answer a Human Override correctly', () => counter('overrideOk') >= 1],
-  ['override_10', 'Cyborg', 'Answer 10 Human Overrides correctly', () => counter('overrideOk') >= 10],
-  ['silver', 'Silver Circuit', 'Reach Silver league', () => S.player.peakLeague >= 1],
-  ['gold', 'Golden Logic', 'Reach Gold league', () => S.player.peakLeague >= 2],
-  ['platinum', 'Platinum Processor', 'Reach Platinum league', () => S.player.peakLeague >= 3],
-  ['diamond', 'Diamond Core', 'Reach Diamond league', () => S.player.peakLeague >= 4],
-  ['neural', 'Neural Ascendant', 'Reach Neural league', () => S.player.peakLeague >= 5],
-  ['card_1', 'Collector', 'Get your first card', () => counter('cardGot') + counter('nftGot') >= 1],
-  ['card_50', 'Hoarder', 'Get 50 cards', () => counter('cardGot') + counter('nftGot') >= 50],
-  ['upgrade_1', 'Overclocker', 'Upgrade a card', () => counter('upgrades') >= 1],
-  ['plus_4', 'Maxed Out', 'Own a +4 card', () => S.inv.some(c => c.plus >= 4)],
-  ['evolve_1', 'Evolution', 'Evolve a card to the next rarity', () => counter('evolves') >= 1],
-  ['set_1', 'Full Rig', 'Equip all 4 card types at once', () => !!activeSet()],
-  ['legendary', 'Golden Ticket', 'Get a Legendary card', () => counter('legendaryGot') >= 1],
-  ['unique', 'One of a Kind', 'Get a Unique card from the AI Lab', () => counter('uniqueGot') >= 1],
-  ['album_col', 'Album Page', 'Complete a rarity column in the album', () => CONFIG.CARDS.rarities.some((r, i) => CONFIG.CARDS.types.every(t => S.album[t.id + ':' + i]))],
-  ['ai_1', 'First Lesson', 'Teach your AI in the AI Lab', () => S.ai.rounds >= 1],
-  ['ai_25', 'Mentor', 'Give your AI 25 useful answers', () => S.ai.useful >= 25],
-  ['ai_200', 'Professor', 'Give your AI 200 useful answers', () => S.ai.useful >= 200],
-  ['guild_join', 'Better Together', 'Join or create a guild', () => !!S.player.guildId],
-  ['guild_hq', 'Headquarters', 'Your guild has an HQ', () => { const g = playerGuild(); return !!(g && g.hq >= 1); }],
-  ['cosmetic', 'Fresh Paint', 'Unlock a cosmetic', () => S.player.cosmetics.owned.length > 3],
-  ['market_buy', 'Shopper', 'Buy a card on the market', () => counter('cardBought') + counter('nftBought') >= 1],
-  ['market_sell', 'Merchant', 'Sell a card on the market', () => counter('cardSold') + counter('nftSold') >= 1],
-  ['market_stand', 'Trade Baron', 'Build a Marketplace Stand', () => !!S.market.stand],
-  ['explore_10', 'Scout', 'Explore 10 land sectors', () => counter('tilesExplored') >= 10],
-  ['explore_100', 'Cartographer', 'Explore 100 land sectors', () => counter('tilesExplored') >= 100],
-  ['land_1000', 'Landlord', 'Own 1,000 SU of land', () => S.player.land >= 1000],
-  ['expansion', 'Witness', 'See a global server expansion', () => counter('expansions') >= 1],
-  ['cr_100k', 'Six Figures', 'Earn 100K CR in total', () => counter('crEarned') >= 1e5],
-  ['cr_1m', 'Millionaire', 'Earn 1M CR in total', () => counter('crEarned') >= 1e6],
-  ['pet_10', 'Grown Up', 'Reach Pet Level 10', () => petLevelInfo().level >= 10],
-  ['rebirth', 'Neural Rebirth', 'Prestige your AI', () => S.player.rebirths >= 1],
-  ['season', 'Season Veteran', 'Finish a season', () => S.season.index >= 2],
+  ['first_train', 'Salut, lume', 'Antrenează-ți AI-ul o dată', () => counter('trains') >= 1],
+  ['train_100', 'Coborâre pe gradient', 'Antrenează-ți AI-ul de 100 de ori', () => counter('trains') >= 100],
+  ['train_1000', 'Învățare profundă', 'Antrenează-ți AI-ul de 1.000 de ori', () => counter('trains') >= 1000],
+  ['stand_1', 'Fundația', 'Construiește un Stand de antrenament', () => S.stands.length >= 1],
+  ['stand_3', 'Campus', 'Deține 3 Standuri de antrenament', () => S.stands.length >= 3],
+  ['stand_x6', 'Overclockat', 'Îmbunătățește un stand la x6', () => S.stands.some(s => s.tier >= 2)],
+  ['stand_x10', 'Supercomputer', 'Îmbunătățește un stand la x10', () => S.stands.some(s => s.tier >= 4)],
+  ['solo_1', 'Supraviețuitor solitar', 'Câștigă o rundă în Arena Solo', () => counter('soloWins') >= 1],
+  ['solo_10', 'Lup singuratic', 'Câștigă 10 runde în Arena Solo', () => counter('soloWins') >= 10],
+  ['solo_perfect', 'Impecabil', 'Câștigă o rundă Solo cu 10/10 răspunsuri corecte', () => counter('soloPerfect') >= 1],
+  ['multi_1', 'Șobolan de lobby', 'Joacă un meci Multiplayer', () => counter('multiPlayed') >= 1],
+  ['multi_win', 'Campion', 'Termină pe locul 1 la Multiplayer', () => counter('multiWins') >= 1],
+  ['multi_win10', 'Dinastie', 'Termină pe locul 1 la Multiplayer de 10 ori', () => counter('multiWins') >= 10],
+  ['override_1', 'Totuși uman', 'Răspunde corect la o Intervenție umană', () => counter('overrideOk') >= 1],
+  ['override_10', 'Cyborg', 'Răspunde corect la 10 Intervenții umane', () => counter('overrideOk') >= 10],
+  ['silver', 'Circuit de Argint', 'Ajungi în liga Argint', () => S.player.peakLeague >= 1],
+  ['gold', 'Logică de Aur', 'Ajungi în liga Aur', () => S.player.peakLeague >= 2],
+  ['platinum', 'Procesor de Platină', 'Ajungi în liga Platină', () => S.player.peakLeague >= 3],
+  ['diamond', 'Nucleu de Diamant', 'Ajungi în liga Diamant', () => S.player.peakLeague >= 4],
+  ['neural', 'Ascensiune neurală', 'Ajungi în liga Neural', () => S.player.peakLeague >= 5],
+  ['card_1', 'Colecționar', 'Obține prima ta carte', () => counter('cardGot') + counter('nftGot') >= 1],
+  ['card_50', 'Strângător', 'Obține 50 de cărți', () => counter('cardGot') + counter('nftGot') >= 50],
+  ['upgrade_1', 'Overclocker', 'Îmbunătățește o carte', () => counter('upgrades') >= 1],
+  ['plus_4', 'La maximum', 'Deține o carte +4', () => S.inv.some(c => c.plus >= 4)],
+  ['evolve_1', 'Evoluție', 'Evoluează o carte la raritatea următoare', () => counter('evolves') >= 1],
+  ['set_1', 'Echipament complet', 'Echipează simultan toate cele 4 tipuri de cărți', () => !!activeSet()],
+  ['legendary', 'Biletul de aur', 'Obține o carte Legendară', () => counter('legendaryGot') >= 1],
+  ['unique', 'Unic în felul său', 'Obține o carte Unică din Laboratorul AI', () => counter('uniqueGot') >= 1],
+  ['album_col', 'Pagină de album', 'Completează o coloană de raritate în album', () => CONFIG.CARDS.rarities.some((r, i) => CONFIG.CARDS.types.every(t => S.album[t.id + ':' + i]))],
+  ['ai_1', 'Prima lecție', 'Învață-ți AI-ul în Laboratorul AI', () => S.ai.rounds >= 1],
+  ['ai_25', 'Mentor', 'Dă-i AI-ului tău 25 de răspunsuri utile', () => S.ai.useful >= 25],
+  ['ai_200', 'Profesor', 'Dă-i AI-ului tău 200 de răspunsuri utile', () => S.ai.useful >= 200],
+  ['guild_join', 'Împreună e mai bine', 'Alătură-te unei bresle sau creează una', () => !!S.player.guildId],
+  ['guild_hq', 'Cartier general', 'Breasla ta are un Sediu al breslei', () => { const g = playerGuild(); return !!(g && g.hq >= 1); }],
+  ['cosmetic', 'Vopsea proaspătă', 'Deblochează un element cosmetic', () => S.player.cosmetics.owned.length > 3],
+  ['market_buy', 'Cumpărător', 'Cumpără o carte de pe Piață', () => counter('cardBought') + counter('nftBought') >= 1],
+  ['market_sell', 'Negustor', 'Vinde o carte pe Piață', () => counter('cardSold') + counter('nftSold') >= 1],
+  ['market_stand', 'Baron al comerțului', 'Construiește un Stand de piață', () => !!S.market.stand],
+  ['explore_10', 'Cercetaș', 'Explorează 10 sectoare de teren', () => counter('tilesExplored') >= 10],
+  ['explore_100', 'Cartograf', 'Explorează 100 de sectoare de teren', () => counter('tilesExplored') >= 100],
+  ['land_1000', 'Moșier', 'Deține 1.000 SU de teren', () => S.player.land >= 1000],
+  ['expansion', 'Martor', 'Asistă la o extindere globală a serverului', () => counter('expansions') >= 1],
+  ['cr_100k', 'Șase cifre', 'Câștigă în total 100K CR', () => counter('crEarned') >= 1e5],
+  ['cr_1m', 'Milionar', 'Câștigă în total 1M CR', () => counter('crEarned') >= 1e6],
+  ['pet_10', 'Adult', 'Ajungi cu AI-ul tău la nivelul 10', () => petLevelInfo().level >= 10],
+  ['rebirth', 'Renaștere neurală', 'Trece AI-ul printr-o Renaștere neurală (prestigiu)', () => S.player.rebirths >= 1],
+  ['season', 'Veteran de sezon', 'Termină un sezon', () => S.season.index >= 2],
 ];
 const ACH_REWARD_SHARDS = 10;
 function checkAchievements() {
@@ -100,7 +106,7 @@ function checkAchievements() {
     if (ok) {
       S.ach[a[0]] = S.time;
       addShards(ACH_REWARD_SHARDS);
-      log('SYSTEM', `ACHIEVEMENT UNLOCKED: ${a[1]} (+${ACH_REWARD_SHARDS} shards)`);
+      log('SYSTEM', `REALIZARE DEBLOCATĂ: ${a[1]} (+${ACH_REWARD_SHARDS} fragmente)`);
       if (typeof onAchievement === 'function') onAchievement(a);
     }
   }
@@ -115,7 +121,7 @@ function endSeason() {
   const title = `S${S.season.index} ${L[p.league].name}`;
   p.titles.push(title);
   const rank = leaderboard('rating').findIndex(e => e.isPlayer) + 1;
-  log('SYSTEM', `SEASON ${S.season.index} ENDED. Rank #${rank}, league ${L[p.league].name}: +${fmt(r.cr)} CR, +${r.shards} shards, title "${title}".`);
+  log('SYSTEM', `SEZONUL ${S.season.index} S-A ÎNCHEIAT. Locul #${rank}, liga ${L[p.league].name}: +${fmt(r.cr)} CR, +${r.shards} fragmente, titlul „${title}”.`);
   const f = CONFIG.SEASON.softReset;
   p.rating = Math.round(1000 + (p.rating - 1000) * f);
   p.league = leagueOf(p.rating);
@@ -127,8 +133,8 @@ function endSeason() {
 // ---------- prestige ----------
 function legacyGain() { const p = S.player; return 1 + Math.floor((p.math + p.trivia + p.speedPoints) / CONFIG.PRESTIGE.statsPerPoint); }
 function whyRebirth() {
-  if (S.player.league < CONFIG.PRESTIGE.league) return `Requires ${CONFIG.LEAGUES[CONFIG.PRESTIGE.league].name} league`;
-  if (typeof arenaBusy === 'function' && arenaBusy()) return 'Finish your match first';
+  if (S.player.league < CONFIG.PRESTIGE.league) return `Necesită liga ${CONFIG.LEAGUES[CONFIG.PRESTIGE.league].name}`;
+  if (typeof arenaBusy === 'function' && arenaBusy()) return 'Termină mai întâi meciul în curs';
   return '';
 }
 

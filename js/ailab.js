@@ -1,15 +1,16 @@
 'use strict';
 /* ============================================================
-   AI LAB — training rounds with the AI. The AI asks, the player
-   answers in their own words (Romanian), and earns rewards:
-   CR, shards, a guaranteed Neural Recalibrator, a chance at a
-   card and a small chance at a UNIQUE card (with a pity timer).
-   Energy: +1 per hour (max 3), more from quiz wins.
-   Offline it uses the local bank below; see ai_bridge.js.
+   LABORATOR AI — runde de antrenament cu AI-ul. AI-ul întreabă,
+   jucătorul răspunde cu propriile cuvinte (în română) și primește
+   recompense: CR, fragmente, un Recalibrator neural garantat, o
+   șansă la o carte și o șansă mică la o carte UNICĂ (cu garanție
+   după un număr de lecții). Energie: +1 pe oră (max 3), plus din
+   victoriile la quiz. Offline folosește banca locală de mai jos;
+   vezi ai_bridge.js.
    ============================================================ */
 
-// kind 'open': the AI wants to learn (no single right answer)
-// kind 'control': known answer, measures attention (anti-spam)
+// kind 'open': AI-ul vrea să învețe (nu există un singur răspuns corect)
+// kind 'control': răspuns cunoscut, verifică atenția (anti-spam)
 const AI_LOCAL_QUESTIONS = [
   ['o01', 'open', 'Cum ai spune altfel: „Mi-e foarte foame”?'],
   ['o02', 'open', 'Ce înseamnă când cineva spune că „a tras chiulul”?'],
@@ -68,7 +69,7 @@ const AI_LOCAL_QUESTIONS = [
   ['c15', 'control', 'Cât face 20 − 8?', ['12', 'doisprezece']],
 ];
 
-let AILAB = null; // current round (not saved)
+let AILAB = null; // runda curentă (nu se salvează)
 
 function addAIEnergy(n) {
   const ai = S.ai, cap = CONFIG.AI_LAB.energyWonCap;
@@ -79,7 +80,7 @@ function addAIEnergy(n) {
 function aiNorm(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 }
-// never keep personal data: e-mails, links, phone numbers, ID-like digit runs
+// nu păstra niciodată date personale: e-mailuri, linkuri, numere de telefon, șiruri lungi de cifre
 function aiSanitize(text) {
   return String(text || '').slice(0, 600)
     .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[ascuns]')
@@ -99,14 +100,14 @@ function aiLocalQuestions(n) {
 
 // ---------- reasons ----------
 function whyAIStart() {
-  if (AILAB && !AILAB.done) return 'A lesson is already running';
-  if (!S.ai.consent) return 'Read and accept the AI Lab notice first';
-  if (S.ai.energy < 1) return 'No AI energy - next in ' + fmtTime(CONFIG.AI_LAB.regenMs - S.ai.acc) + ' (or win a quiz match)';
+  if (AILAB && !AILAB.done) return 'O lecție este deja în desfășurare';
+  if (!S.ai.consent) return 'Citește și acceptă mai întâi informarea Laboratorului AI';
+  if (S.ai.energy < 1) return 'Nu ai energie AI - următoarea peste ' + fmtTime(CONFIG.AI_LAB.regenMs - S.ai.acc) + ' (sau câștigă un meci de quiz)';
   return '';
 }
-function actAIConsent() { S.ai.consent = true; return { ok: true, msg: 'Thank you! The AI Lab is open.' }; }
+function actAIConsent() { S.ai.consent = true; return { ok: true, msg: 'Mulțumim! Laboratorul AI este deschis.' }; }
 
-// questions: from AI_BRIDGE when connected, else the local bank
+// întrebări: de la AI_BRIDGE când e conectat, altfel din banca locală
 function actAIStart(questions, source) {
   const r = whyAIStart(); if (r) return { ok: false, msg: r };
   S.ai.energy--;
@@ -138,8 +139,8 @@ function aiUseful(ans, q) {
 }
 function actAIFinish() {
   const m = AILAB;
-  if (!m || m.done) return { ok: false, msg: 'No lesson running' };
-  if (m.answers.length < m.qs.length) return { ok: false, msg: 'Answer all questions first' };
+  if (!m || m.done) return { ok: false, msg: 'Nicio lecție în desfășurare' };
+  if (m.answers.length < m.qs.length) return { ok: false, msg: 'Răspunde mai întâi la toate întrebările' };
   const A = CONFIG.AI_LAB, L = CONFIG.LEAGUES[S.player.league], ai = S.ai;
   let useful = 0, controlOk = true;
   const batch = [];
@@ -152,7 +153,7 @@ function actAIFinish() {
     if (ans.a) ai.collected.push(entry);
   });
   if (ai.collected.length > A.collectedMax) ai.collected.splice(0, ai.collected.length - A.collectedMax);
-  // rewards: a missed attention check halves them (anti-spam), the Recalibrator is always given
+  // recompense: verificarea atenției ratată le înjumătățește (anti-spam); Recalibratorul se dă mereu
   const k = controlOk ? 1 : 0.5;
   const res = { useful, controlOk, cr: 0, shards: 0, recal: 1, card: null, unique: null, milestone: false };
   res.cr = addCR(Math.round(useful * A.crPerUseful * L.reward * k), 'ailab');
@@ -163,22 +164,22 @@ function actAIFinish() {
   ai.pity++;
   if (useful > 0 && controlOk) {
     if (chance(A.uniqueChance) || ai.pity >= A.uniquePity) {
-      res.unique = giveCard(mintCard({ rarity: CONFIG.CARDS.UNIQUE }), 'AI Lab - UNIQUE');
+      res.unique = giveCard(mintCard({ rarity: CONFIG.CARDS.UNIQUE }), 'Laborator AI - UNICĂ');
       if (res.unique) ai.pity = 0;
     }
-    if (!res.unique && chance(A.cardChance)) res.card = giveCard(mintCard({}), 'AI Lab');
+    if (!res.unique && chance(A.cardChance)) res.card = giveCard(mintCard({}), 'Laborator AI');
   }
   while (ai.useful >= (ai.milestone + 1) * A.milestoneEvery) {
     ai.milestone++;
     addShards(A.milestoneShards); S.player.recal++;
     res.milestone = true;
-    log('SYSTEM', `AI MILESTONE ${ai.milestone}: your AI learned from ${ai.milestone * A.milestoneEvery} answers (+${A.milestoneShards} shards, +1 Recalibrator).`);
+    log('SYSTEM', `REPER AI ${ai.milestone}: AI-ul tău a învățat din ${ai.milestone * A.milestoneEvery} răspunsuri (+${A.milestoneShards} fragmente, +1 Recalibrator neural).`);
   }
   count('aiRounds');
   if (typeof missionProgress === 'function') missionProgress('ai_round', 1);
-  log('SYSTEM', `AI Lab: ${useful}/${m.qs.filter(q => q.kind !== 'control').length} useful answers${controlOk ? '' : ' (attention check missed: half rewards)'}, +${fmt(res.cr)} CR, +${res.shards} shards, +1 Recalibrator${res.card ? ', card: ' + cardLabel(res.card) : ''}${res.unique ? ', UNIQUE: ' + cardLabel(res.unique) : ''}.`);
+  log('SYSTEM', `Laborator AI: ${useful}/${m.qs.filter(q => q.kind !== 'control').length} răspunsuri utile${controlOk ? '' : ' (verificarea atenției ratată: recompense înjumătățite)'}, +${fmt(res.cr)} CR, +${res.shards} fragmente, +1 Recalibrator neural${res.card ? ', carte: ' + cardLabel(res.card) : ''}${res.unique ? ', UNICĂ: ' + cardLabel(res.unique) : ''}.`);
   m.done = true; m.result = res; m.batch = batch;
-  return Object.assign({ ok: true, msg: 'Lesson complete' }, res);
+  return Object.assign({ ok: true, msg: 'Lecție încheiată' }, res);
 }
 function aiExportJSON() {
   return JSON.stringify({ game: 'CyberNet', version: CONFIG.VERSION, player: S.player.name, exported: new Date().toISOString(), answers: S.ai.collected }, null, 1);

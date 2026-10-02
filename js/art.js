@@ -124,7 +124,7 @@ const Art = (() => {
     s += `<rect x="72" y="128" width="56" height="26" rx="6" fill="#0b1320" stroke="${a}" stroke-width="2"/>`;
     if (level >= 5) s += `<rect x="40" y="76" width="12" height="28" rx="4" fill="${b}"/><rect x="148" y="76" width="12" height="28" rx="4" fill="${b}"/>`;
     if (level >= 12) s += `<polygon points="100,158 112,176 88,176" fill="${a}"/>`;
-    s += `<text x="100" y="146" text-anchor="middle" font-family="monospace" font-size="11" fill="${a}">LV ${level}</text>`;
+    s += `<text x="100" y="146" text-anchor="middle" font-family="monospace" font-size="11" fill="${a}">NV ${level}</text>`;
     s += `<g class="pet-particles">${[0, 1, 2, 3, 4, 5].map(i => `<circle cx="${20 + i * 32}" cy="190" r="2.5" fill="${i % 2 ? a : b}" style="animation-delay:${i * 0.15}s"/>`).join('')}</g>`;
     s += `</svg>`;
     cache.set(k, s);
@@ -223,7 +223,7 @@ const Art = (() => {
     const W = 320, H = opts.h || 120, P = { l: 38, r: 8, t: 8, b: 16 };
     let xs = [], ys = [];
     series.forEach(sr => sr.points.forEach(p => { xs.push(p[0]); ys.push(p[1]); }));
-    if (xs.length < 2) return `<div class="empty">${opts.empty || 'Not enough data yet'}</div>`;
+    if (xs.length < 2) return `<div class="empty">${opts.empty || 'Încă nu sunt destule date'}</div>`;
     const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = opts.zero ? 0 : Math.min(...ys), y1 = Math.max(...ys) * 1.05 || 1;
     const sx = x => P.l + (x - x0) / (x1 - x0 || 1) * (W - P.l - P.r);
     const sy = y => H - P.b - (y - y0) / (y1 - y0 || 1) * (H - P.t - P.b);

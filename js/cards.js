@@ -9,7 +9,8 @@
 
 function cardType(id) { return CONFIG.CARDS.types.find(t => t.id === id) || CONFIG.CARDS.types[0]; }
 function rarityOf(r) { return CONFIG.CARDS.rarities[r]; }
-function cardName(c) { return rarityOf(c.rarity).name + ' ' + cardType(c.type).name; }
+// Romanian word order: type first, then rarity (rarity names are feminine, agreeing with "carte")
+function cardName(c) { return cardType(c.type).name + ' · ' + rarityOf(c.rarity).name; }
 function cardLabel(c) { return cardName(c) + (c.plus ? ' +' + c.plus : ''); }
 
 function rollCardRarity() {
@@ -85,23 +86,23 @@ function recordAlbum(c) {
   if (S.album[k]) return;
   S.album[k] = S.time;
   addShards(A.entryShards);
-  log('SYSTEM', `ALBUM: new entry ${cardName(c)} (+${A.entryShards} shards).`);
+  log('SYSTEM', `ALBUM: intrare nouă ${cardName(c)} (+${A.entryShards} fragmente).`);
   // a full rarity column (all 4 types) pays a bigger reward
   if (CONFIG.CARDS.types.every(t => S.album[albumKey(t.id, c.rarity)])) {
     const sh = A.columnShards[c.rarity] || 0;
     addShards(sh);
     S.player.recal += A.columnRecal;
-    log('SYSTEM', `ALBUM: ${rarityOf(c.rarity).name} column complete! +${sh} shards, +${A.columnRecal} Neural Recalibrator.`);
+    log('SYSTEM', `ALBUM: coloana ${rarityOf(c.rarity).name} este completă! +${sh} fragmente, +${A.columnRecal} Recalibrator neural.`);
   }
 }
 function giveCard(c, reason) {
-  if (invFull()) { log('SYSTEM', `Inventory full - ${cardName(c)} was lost. Salvage some cards!`); return null; }
+  if (invFull()) { log('SYSTEM', `Inventar plin - ${cardName(c)} s-a pierdut. Reciclează câteva cărți!`); return null; }
   S.inv.push(c);
   count('cardGot');
   if (c.rarity === 4) count('legendaryGot');
   if (c.rarity === CONFIG.CARDS.UNIQUE) count('uniqueGot');
   recordAlbum(c);
-  if (reason) log('SYSTEM', `Card acquired: ${cardLabel(c)} (${reason})`);
+  if (reason) log('SYSTEM', `Carte obținută: ${cardLabel(c)} (${reason})`);
   return c;
 }
 function dropChance(base) { return Math.min(0.95, base * (currentEvent().id === 'double_drops' ? 2 : 1)); }
@@ -115,9 +116,9 @@ function rollDrop(baseChance, reason) {
 }
 function isEquipped(id) { return S.equipped.includes(id); }
 function cardStatusReason(c) {
-  if (c.listed) return 'Listed on market';
-  if (isEquipped(c.id)) return 'Equipped - unequip first';
-  if (c.locked) return 'Locked - unlock first';
+  if (c.listed) return 'Listată pe piață';
+  if (isEquipped(c.id)) return 'Echipată - dezechipeaz-o mai întâi';
+  if (c.locked) return 'Blocată - deblocheaz-o mai întâi';
   return '';
 }
 function equippedOfType(type) { return S.equipped.map(id => S.inv.find(c => c.id === id)).find(c => c && c.type === type) || null; }
@@ -129,12 +130,12 @@ function upgradeCost(c) {
 }
 function whyUpgradeCard(id) {
   const c = S.inv.find(x => x.id === id);
-  if (!c) return 'Card not found';
-  if (c.listed) return 'Listed on market';
-  if (c.plus >= CONFIG.CARDS.maxPlus) return c.rarity < CONFIG.CARDS.MAX_CRAFT_RARITY ? 'At +4 - evolve it to the next rarity' : 'Max level';
+  if (!c) return 'Cartea nu a fost găsită';
+  if (c.listed) return 'Listată pe piață';
+  if (c.plus >= CONFIG.CARDS.maxPlus) return c.rarity < CONFIG.CARDS.MAX_CRAFT_RARITY ? 'La +4 - evolueaz-o la raritatea următoare' : 'Nivel maxim';
   const k = upgradeCost(c);
-  if (!canPayCR(k.cr)) return `Need ${fmt(k.cr - S.player.cr)} CR more`;
-  if (S.player.shards < k.shards) return `Need ${k.shards - S.player.shards} more shards`;
+  if (!canPayCR(k.cr)) return `Îți mai trebuie ${fmt(k.cr - S.player.cr)} CR`;
+  if (S.player.shards < k.shards) return `Îți mai trebuie ${k.shards - S.player.shards} fragmente`;
   return '';
 }
 function doUpgradeCard(id) {
@@ -144,7 +145,7 @@ function doUpgradeCard(id) {
   c.plus++;
   count('upgrades');
   if (typeof missionProgress === 'function') missionProgress('upgrade', 1);
-  log('SYSTEM', `UPGRADE: ${cardName(c)} is now +${c.plus}.`);
+  log('SYSTEM', `ÎMBUNĂTĂȚIRE: ${cardName(c)} este acum +${c.plus}.`);
   return c;
 }
 
@@ -152,13 +153,13 @@ function doUpgradeCard(id) {
 function evolveCost(c) { return CONFIG.CARDS.evolve[c.rarity] || null; }
 function whyEvolveCard(id) {
   const c = S.inv.find(x => x.id === id);
-  if (!c) return 'Card not found';
-  if (c.listed) return 'Listed on market';
-  if (c.rarity >= CONFIG.CARDS.MAX_CRAFT_RARITY) return c.rarity === CONFIG.CARDS.UNIQUE ? 'Unique cards cannot evolve' : 'Legendary is the top craftable rarity';
-  if (c.plus < CONFIG.CARDS.maxPlus) return `Upgrade to +${CONFIG.CARDS.maxPlus} first`;
+  if (!c) return 'Cartea nu a fost găsită';
+  if (c.listed) return 'Listată pe piață';
+  if (c.rarity >= CONFIG.CARDS.MAX_CRAFT_RARITY) return c.rarity === CONFIG.CARDS.UNIQUE ? 'Cărțile unice nu pot evolua' : 'Legendară este cea mai înaltă raritate care se poate obține prin evoluție';
+  if (c.plus < CONFIG.CARDS.maxPlus) return `Îmbunătățește mai întâi la +${CONFIG.CARDS.maxPlus}`;
   const k = evolveCost(c);
-  if (!canPayCR(k.cr)) return `Need ${fmt(k.cr - S.player.cr)} CR more`;
-  if (S.player.shards < k.shards) return `Need ${k.shards - S.player.shards} more shards`;
+  if (!canPayCR(k.cr)) return `Îți mai trebuie ${fmt(k.cr - S.player.cr)} CR`;
+  if (S.player.shards < k.shards) return `Îți mai trebuie ${k.shards - S.player.shards} fragmente`;
   return '';
 }
 function doEvolveCard(id) {
@@ -174,16 +175,16 @@ function doEvolveCard(id) {
   count('evolves');
   recordAlbum(c);
   if (c.rarity === 4) count('legendaryGot');
-  log('SYSTEM', `EVOLUTION: your ${cardType(c.type).name} became ${rarityOf(c.rarity).name}!`);
+  log('SYSTEM', `EVOLUȚIE: cartea ta ${cardType(c.type).name} a devenit ${rarityOf(c.rarity).name}!`);
   return c;
 }
 
 // ---------- reroll random bonus stats (Neural Recalibrator) ----------
 function whyRerollCard(id) {
   const c = S.inv.find(x => x.id === id);
-  if (!c) return 'Card not found';
-  if (c.listed) return 'Listed on market';
-  if (S.player.recal < 1) return 'Need a Neural Recalibrator (guaranteed from every AI Lab round)';
+  if (!c) return 'Cartea nu a fost găsită';
+  if (c.listed) return 'Listată pe piață';
+  if (S.player.recal < 1) return 'Ai nevoie de un Recalibrator neural (garantat la fiecare rundă din Laboratorul AI)';
   return '';
 }
 function doRerollCard(id) {
@@ -191,7 +192,7 @@ function doRerollCard(id) {
   S.player.recal--;
   c.bonus = pickBonusTypes(rarityOf(c.rarity).bonus).map(t => ({ type: t, roll: rollValue() }));
   count('rerolls');
-  log('SYSTEM', `RECALIBRATED: ${cardLabel(c)} got new bonus stats.`);
+  log('SYSTEM', `RECALIBRAT: ${cardLabel(c)} a primit statistici bonus noi.`);
   return c;
 }
 
@@ -230,6 +231,6 @@ function migrateNftSave(data) {
     S.market.demand = {};
     for (const t of CONFIG.CARDS.types) S.market.demand[t.id] = 1;
     for (const c of S.inv) S.album[albumKey(c.type, c.rarity)] = S.album[albumKey(c.type, c.rarity)] || S.time;
-    log('SYSTEM', `Upgrade to v2: your ${S.inv.length} NFTs were converted into cards.`);
+    log('SYSTEM', `Actualizare la v2: cele ${S.inv.length} NFT-uri ale tale au fost transformate în cărți.`);
   } finally { S = prev; }
 }

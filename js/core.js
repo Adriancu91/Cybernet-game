@@ -37,14 +37,16 @@ function fmt(n) {
   if (n === null || n === undefined || !isFinite(n)) return '0';
   const neg = n < 0; n = Math.abs(n);
   let s;
-  if (n >= 1e12) s = (n / 1e12).toFixed(1) + 'T';
-  else if (n >= 1e9) s = (n / 1e9).toFixed(1) + 'B';
-  else if (n >= 1e6) s = (n / 1e6).toFixed(1) + 'M';
-  else if (n >= 1e4) s = (n / 1e3).toFixed(1) + 'K';
-  else s = Math.floor(n).toLocaleString('en-US');
-  return (neg ? '-' : '') + s.replace('.0K', 'K').replace('.0M', 'M').replace('.0B', 'B');
+  // Romanian style: decimal comma, dot as thousands separator
+  const short = (v, suf) => v.toFixed(1).replace(/\.0$/, '').replace('.', ',') + suf;
+  if (n >= 1e12) s = short(n / 1e12, 'T');
+  else if (n >= 1e9) s = short(n / 1e9, 'Mld');
+  else if (n >= 1e6) s = short(n / 1e6, 'M');
+  else if (n >= 1e4) s = short(n / 1e3, 'K');
+  else s = String(Math.floor(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return (neg ? '-' : '') + s;
 }
-function fmtPct(n, d = 1) { return (Math.round(n * Math.pow(10, d)) / Math.pow(10, d)) + '%'; }
+function fmtPct(n, d = 1) { return String(Math.round(n * Math.pow(10, d)) / Math.pow(10, d)).replace('.', ',') + '%'; }
 function fmtTime(ms) {
   ms = Math.max(0, Math.ceil(ms / 1000));
   const h = Math.floor(ms / 3600), m = Math.floor((ms % 3600) / 60), s = ms % 60;
@@ -66,7 +68,7 @@ function newState(seed) {
     time: 0, realTs: Date.now(), created: Date.now(),
     nextId: 1,
     player: {
-      name: 'You', cr: st.cr, dt: st.dt, land: st.land, shards: st.shards,
+      name: 'Tu', cr: st.cr, dt: st.dt, land: st.land, shards: st.shards,
       math: st.math, trivia: st.trivia, speedPoints: st.speedPoints,
       rating: st.rating, league: 0, peakLeague: 0,
       stamina: CONFIG.SOLO.staminaMax, staminaAcc: 0, dtAcc: 0,
@@ -117,7 +119,7 @@ function addCR(n, source) {
   if (S.econ.debt > 0) {
     const pay = Math.min(S.econ.debt, S.player.cr);
     S.player.cr -= pay; S.econ.debt -= pay;
-    if (S.econ.debt === 0 && S.econ.offline) { S.econ.offline = false; log('SYSTEM', 'Upkeep debt paid - structures back ONLINE.'); }
+    if (S.econ.debt === 0 && S.econ.offline) { S.econ.offline = false; log('SYSTEM', 'Datoria de întreținere a fost achitată - structurile sunt din nou ONLINE.'); }
   }
   if (typeof missionProgress === 'function') missionProgress('earn', n);
   return n;
@@ -164,7 +166,7 @@ function loadGame() {
   } catch (e) { console.warn('Load failed', e); return null; }
 }
 function migrate(data) {
-  if (!data || typeof data !== 'object' || !data.player) throw new Error('Invalid save file');
+  if (!data || typeof data !== 'object' || !data.player) throw new Error('Fișier de salvare invalid');
   // fill any fields missing from older saves with defaults
   const fresh = newState(data.seed || 1);
   function fill(target, def) {

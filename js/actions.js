@@ -16,13 +16,13 @@ function bestStandId() {
 }
 function whyTrain(times) {
   const cd = (S.player.trainCdUntil || 0) - S.time;
-  if (cd > 0) return 'Cooling down: ' + fmtTime(cd);
-  if (S.player.dt < times) return `Need ${times - S.player.dt} more Data Tokens`;
+  if (cd > 0) return 'Răcire în curs: ' + fmtTime(cd);
+  if (S.player.dt < times) return `Tokeni de date insuficienți - îți mai trebuie ${times - S.player.dt} DT`;
   return '';
 }
 function actTrain(stat, times, standId) {
   times = times === 10 ? 10 : 1;
-  if (!['math', 'trivia', 'speed'].includes(stat)) return fail('Unknown stat');
+  if (!['math', 'trivia', 'speed'].includes(stat)) return fail('Statistică necunoscută');
   const r = whyTrain(times); if (r) return fail(r);
   if (standId && !S.stands.find(s => s.id === standId)) standId = null;
   spendDT(times);
@@ -37,14 +37,14 @@ function actTrain(stat, times, standId) {
   S.player.trainCdUntil = S.time + CONFIG.PET.trainCooldownMs;
   count('trains', times);
   missionProgress('train', times);
-  const name = stat === 'math' ? 'Math IQ' : stat === 'trivia' ? 'Trivia DB' : 'Speed';
-  return ok(`+${total.toFixed(1)} ${name} (x${standMult(standId)} stand)`);
+  const name = stat === 'math' ? 'IQ matematic' : stat === 'trivia' ? 'Cultură generală' : 'Viteză';
+  return ok(`+${total.toFixed(1).replace('.', ',')} ${name} (stand x${standMult(standId)})`);
 }
 
 // ---------- data tokens ----------
 function whyBuyDT(n) {
-  if (!(n >= 1)) return 'Enter an amount';
-  if (!canPayCR(dtPriceFor(n))) return `Need ${fmt(dtPriceFor(n) - S.player.cr)} CR more`;
+  if (!(n >= 1)) return 'Introdu o cantitate';
+  if (!canPayCR(dtPriceFor(n))) return `Îți mai trebuie ${fmt(dtPriceFor(n) - S.player.cr)} CR`;
   return '';
 }
 function actBuyDT(n) {
@@ -54,15 +54,15 @@ function actBuyDT(n) {
   spendCR(price, 'dt');
   S.player.dtBuys.push({ t: S.time, n });
   addDT(n);
-  return ok(`Bought ${n} DT for ${fmt(price)} CR`);
+  return ok(`Ai cumpărat ${n} DT cu ${fmt(price)} CR`);
 }
 
 // ---------- land ----------
 function whyBuyLand(n) {
-  if (!(n >= 1)) return 'Choose a plot';
-  if (n > CONFIG.LAND.heavyPlot && serverFrozen()) return 'Infrastructure frozen: ' + fmtTime(S.server.freezeUntil - S.time);
-  if (usedSpace() + n > S.server.total) return 'Not enough free space on the Global Server';
-  if (!canPayCR(n * landPrice())) return `Need ${fmt(n * landPrice() - S.player.cr)} CR more`;
+  if (!(n >= 1)) return 'Alege o parcelă';
+  if (n > CONFIG.LAND.heavyPlot && serverFrozen()) return 'Infrastructură înghețată: ' + fmtTime(S.server.freezeUntil - S.time);
+  if (usedSpace() + n > S.server.total) return 'Spațiu liber insuficient pe Serverul global';
+  if (!canPayCR(n * landPrice())) return `Îți mai trebuie ${fmt(n * landPrice() - S.player.cr)} CR`;
   return '';
 }
 function actBuyLand(n) {
@@ -70,17 +70,17 @@ function actBuyLand(n) {
   const cost = n * landPrice();
   spendCR(cost, 'land');
   S.player.land += n;
-  log('SERVER', `You bought ${fmt(n)} SU of land for ${fmt(cost)} CR.`);
+  log('SERVER', `Ai cumpărat ${fmt(n)} SU de teren cu ${fmt(cost)} CR.`);
   checkServerCapacity();
-  return ok(`+${n} SU land`);
+  return ok(`+${n} SU teren`);
 }
 
 // ---------- stands ----------
 function whyBuildStand() {
   const t = CONFIG.STAND_TIERS[0];
-  if (S.stands.length >= CONFIG.MAX_STANDS) return `Max ${CONFIG.MAX_STANDS} stands`;
-  if (landFree() < t.land) return `Need ${t.land - landFree()} more free land (SU)`;
-  if (!canPayCR(t.cost)) return `Need ${fmt(t.cost - S.player.cr)} CR more`;
+  if (S.stands.length >= CONFIG.MAX_STANDS) return `Maximum ${CONFIG.MAX_STANDS} standuri`;
+  if (landFree() < t.land) return `Îți mai trebuie ${t.land - landFree()} SU de teren liber`;
+  if (!canPayCR(t.cost)) return `Îți mai trebuie ${fmt(t.cost - S.player.cr)} CR`;
   return '';
 }
 function actBuildStand() {
@@ -88,19 +88,19 @@ function actBuildStand() {
   spendCR(CONFIG.STAND_TIERS[0].cost, 'stands');
   const s = { id: newId('s'), tier: 0 };
   S.stands.push(s);
-  log('SYSTEM', `Training Stand #${S.stands.length} built (x2).`);
-  return ok('Stand built');
+  log('SYSTEM', `Standul de antrenament #${S.stands.length} a fost construit (x2).`);
+  return ok('Stand construit');
 }
 function whyUpgradeStand(id) {
   const s = S.stands.find(x => x.id === id);
-  if (!s) return 'Stand not found';
-  if (s.tier >= CONFIG.STAND_TIERS.length - 1) return 'Max tier (x10)';
+  if (!s) return 'Standul nu a fost găsit';
+  if (s.tier >= CONFIG.STAND_TIERS.length - 1) return 'Nivel maxim (x10)';
   const nx = CONFIG.STAND_TIERS[s.tier + 1];
-  if (S.player.league < nx.league) return `Requires ${CONFIG.LEAGUES[nx.league].name} league`;
-  if (s.tier + 1 >= CONFIG.HEAVY_STAND_TIER && serverFrozen()) return 'Infrastructure frozen: ' + fmtTime(S.server.freezeUntil - S.time);
+  if (S.player.league < nx.league) return `Necesită liga ${CONFIG.LEAGUES[nx.league].name}`;
+  if (s.tier + 1 >= CONFIG.HEAVY_STAND_TIER && serverFrozen()) return 'Infrastructură înghețată: ' + fmtTime(S.server.freezeUntil - S.time);
   const extra = nx.land - CONFIG.STAND_TIERS[s.tier].land;
-  if (landFree() < extra) return `Need ${fmt(extra - landFree())} more free land (SU)`;
-  if (!canPayCR(nx.cost)) return `Need ${fmt(nx.cost - S.player.cr)} CR more`;
+  if (landFree() < extra) return `Îți mai trebuie ${fmt(extra - landFree())} SU de teren liber`;
+  if (!canPayCR(nx.cost)) return `Îți mai trebuie ${fmt(nx.cost - S.player.cr)} CR`;
   return '';
 }
 function actUpgradeStand(id) {
@@ -109,8 +109,8 @@ function actUpgradeStand(id) {
   const nx = CONFIG.STAND_TIERS[s.tier + 1];
   spendCR(nx.cost, 'stands');
   s.tier++;
-  log('SYSTEM', `Training Stand upgraded to x${nx.mult}.`);
-  return ok('Upgraded to x' + nx.mult);
+  log('SYSTEM', `Standul de antrenament a fost îmbunătățit la x${nx.mult}.`);
+  return ok('Îmbunătățit la x' + nx.mult);
 }
 function standRefund(s) {
   let inv = 0;
@@ -119,12 +119,12 @@ function standRefund(s) {
 }
 function actDemolishStand(id) {
   const s = S.stands.find(x => x.id === id);
-  if (!s) return fail('Stand not found');
+  if (!s) return fail('Standul nu a fost găsit');
   const refund = standRefund(s);
   S.stands = S.stands.filter(x => x !== s);
   addCR(refund, 'refund');
-  log('SYSTEM', `Stand demolished: +${fmt(refund)} CR refund, ${CONFIG.STAND_TIERS[s.tier].land} SU land freed.`);
-  return ok('Demolished');
+  log('SYSTEM', `Stand demolat: rambursare +${fmt(refund)} CR, ${CONFIG.STAND_TIERS[s.tier].land} SU de teren eliberate.`);
+  return ok('Demolat');
 }
 
 // ---------- arena ----------
@@ -134,9 +134,9 @@ function actMulti(now) { return startMulti(now); }
 // ---------- cards ----------
 function whyEquip(id) {
   const c = S.inv.find(x => x.id === id);
-  if (!c) return 'Not found';
-  if (isEquipped(id)) return 'Already equipped';
-  if (c.listed) return 'Listed on market';
+  if (!c) return 'Cartea nu a fost găsită';
+  if (isEquipped(id)) return 'Deja echipată';
+  if (c.listed) return 'Listată pe Piață';
   return '';
 }
 // one card per type: equipping replaces the card of the same type
@@ -146,63 +146,63 @@ function actEquip(id) {
   const old = equippedOfType(c.type);
   S.equipped = S.equipped.filter(x => !old || x !== old.id);
   S.equipped.push(id);
-  return ok(old ? `Equipped (replaced ${cardLabel(old)})` : 'Equipped');
+  return ok(old ? `Echipată (a înlocuit ${cardLabel(old)})` : 'Echipată');
 }
 function actUnequip(id) {
-  if (!isEquipped(id)) return fail('Not equipped');
+  if (!isEquipped(id)) return fail('Nu este echipată');
   S.equipped = S.equipped.filter(x => x !== id);
-  return ok('Unequipped');
+  return ok('Dezechipată');
 }
 function actToggleLock(id) {
   const c = S.inv.find(x => x.id === id);
-  if (!c) return fail('Not found');
+  if (!c) return fail('Cartea nu a fost găsită');
   c.locked = !c.locked;
-  return ok(c.locked ? 'Locked' : 'Unlocked');
+  return ok(c.locked ? 'Blocată' : 'Deblocată');
 }
 function actUpgradeCard(id) {
   const r = whyUpgradeCard(id); if (r) return fail(r);
   const c = doUpgradeCard(id);
-  return Object.assign(ok(`${cardName(c)} upgraded to +${c.plus}`), { card: c });
+  return Object.assign(ok(`${cardName(c)} îmbunătățită la +${c.plus}`), { card: c });
 }
 function actEvolveCard(id) {
   const r = whyEvolveCard(id); if (r) return fail(r);
   const c = doEvolveCard(id);
-  return Object.assign(ok(`Evolved into ${rarityOf(c.rarity).name}!`), { card: c });
+  return Object.assign(ok(`A evoluat la raritatea ${rarityOf(c.rarity).name}!`), { card: c });
 }
 function actRerollCard(id) {
   const r = whyRerollCard(id); if (r) return fail(r);
   const c = doRerollCard(id);
-  return Object.assign(ok('New bonus stats rolled'), { card: c });
+  return Object.assign(ok('Statistici bonus noi generate'), { card: c });
 }
 function whySalvage(id) {
   const c = S.inv.find(x => x.id === id);
-  if (!c) return 'Not found';
+  if (!c) return 'Cartea nu a fost găsită';
   return cardStatusReason(c);
 }
 function actSalvage(ids) {
   if (!Array.isArray(ids)) ids = [ids];
   ids = [...new Set(ids)];
   for (const id of ids) { const r = whySalvage(id); if (r) return fail(r); }
-  if (!ids.length) return fail('Select cards to salvage');
+  if (!ids.length) return fail('Selectează cărțile de reciclat');
   let total = 0;
   for (const id of ids) { const c = S.inv.find(x => x.id === id); total += salvageValue(c); }
   S.inv = S.inv.filter(c => !ids.includes(c.id));
   addShards(total);
   missionProgress('salvage', ids.length);
-  log('SYSTEM', `Salvaged ${ids.length} card(s) into ${total} shards.`);
-  return ok(`+${total} shards`);
+  log('SYSTEM', `Cărți reciclate: ${ids.length}, transformate în ${total} Fragmente.`);
+  return ok(`+${total} Fragmente`);
 }
 function whyForge(type) {
-  if (!CONFIG.CARDS.types.find(t => t.id === type)) return 'Choose a type';
-  if (invFull()) return 'Inventory full';
-  if (S.player.shards < CONFIG.CARDS.forgeCost) return `Need ${CONFIG.CARDS.forgeCost - S.player.shards} more shards`;
+  if (!CONFIG.CARDS.types.find(t => t.id === type)) return 'Alege un tip';
+  if (invFull()) return 'Inventar plin';
+  if (S.player.shards < CONFIG.CARDS.forgeCost) return `Îți mai trebuie ${CONFIG.CARDS.forgeCost - S.player.shards} Fragmente`;
   return '';
 }
 function actForge(type) {
   const r = whyForge(type); if (r) return fail(r);
   S.player.shards -= CONFIG.CARDS.forgeCost;
-  const c = giveCard(mintCard({ type, rarity: 0 }), 'shard forge');
-  return Object.assign(ok('Card forged from shards'), { card: c });
+  const c = giveCard(mintCard({ type, rarity: 0 }), 'forja de Fragmente');
+  return Object.assign(ok('Carte forjată din Fragmente'), { card: c });
 }
 
 // ---------- guild ----------
@@ -211,8 +211,8 @@ function actJoinGuild(gid) {
   const g = guildById(gid);
   S.player.guildId = g.id;
   g.contrib.player = g.contrib.player || 0;
-  log('GUILD', `You joined [${g.tag}] ${g.name}.`);
-  return ok('Joined ' + g.name);
+  log('GUILD', `Te-ai alăturat breslei [${g.tag}] ${g.name}.`);
+  return ok('Te-ai alăturat breslei ' + g.name);
 }
 function actCreateGuild(name) {
   const r = whyCreateGuild(name); if (r) return fail(r);
@@ -223,17 +223,17 @@ function actCreateGuild(name) {
   S.guilds.push(g);
   S.player.guildId = g.id;
   g.contrib.player = 0;
-  log('GUILD', `You founded [${g.tag}] ${g.name}. Bots will start applying to join.`);
-  return ok('Guild created');
+  log('GUILD', `Ai fondat breasla [${g.tag}] ${g.name}. Boții vor începe să ceară să se alăture.`);
+  return ok('Breaslă creată');
 }
 function actLeaveGuild() {
   const g = playerGuild();
-  if (!g) return fail('Not in a guild');
+  if (!g) return fail('Nu ești într-o breaslă');
   S.player.guildId = null;
   S.player.guildLeftAt = S.time;
   if (g.isPlayer) g.isPlayer = false; // the guild lives on, run by its bots
-  log('GUILD', `You left [${g.tag}] ${g.name}. You can join another guild in 24h.`);
-  return ok('Left guild');
+  log('GUILD', `Ai părăsit breasla [${g.tag}] ${g.name}. Te poți alătura altei bresle peste 24h.`);
+  return ok('Ai părăsit breasla');
 }
 function actDonate(n) {
   n = Math.floor(n);
@@ -243,8 +243,8 @@ function actDonate(n) {
   g.vault += n;
   g.contrib.player = (g.contrib.player || 0) + n;
   missionProgress('donate', n);
-  log('GUILD', `You donated ${fmt(n)} CR to [${g.tag}] vault (now ${fmt(g.vault)} GV).`);
-  return ok('Donated');
+  log('GUILD', `Ai donat ${fmt(n)} CR în seiful breslei [${g.tag}] (acum ${fmt(g.vault)} GV).`);
+  return ok('Donație trimisă');
 }
 function actUpgradeHQ() {
   const r = whyUpgradeHQ(); if (r) return fail(r);
@@ -252,23 +252,23 @@ function actUpgradeHQ() {
   g.vault -= c.total;
   g.land += c.landNeeded;
   g.hq++;
-  log('GUILD', `[${g.tag}] Guild HQ level ${g.hq} built (${fmt(c.landNeeded)} SU guild land + ${fmt(c.fee)} GV fee).`);
+  log('GUILD', `[${g.tag}] Sediul breslei, nivelul ${g.hq}, a fost construit (${fmt(c.landNeeded)} SU teren de breaslă + taxă ${fmt(c.fee)} GV).`);
   checkServerCapacity();
-  return ok('HQ level ' + g.hq);
+  return ok('Sediul breslei: nivelul ' + g.hq);
 }
 function actBuyCosmetic(id) {
   const r = whyBuyCosmetic(id); if (r) return fail(r);
   const c = CONFIG.COSMETICS.find(x => x.id === id), g = playerGuild();
   g.vault -= c.cost;
   S.player.cosmetics.owned.push(id);
-  log('GUILD', `Unlocked cosmetic "${c.name}" for ${fmt(c.cost)} GV.`);
-  return ok('Unlocked ' + c.name);
+  log('GUILD', `Element cosmetic deblocat: „${c.name}” pentru ${fmt(c.cost)} GV.`);
+  return ok('Deblocat: ' + c.name);
 }
 function actUseCosmetic(id) {
   const c = CONFIG.COSMETICS.find(x => x.id === id);
-  if (!c || !S.player.cosmetics.owned.includes(id)) return fail('Not owned');
+  if (!c || !S.player.cosmetics.owned.includes(id)) return fail('Nu deții acest element');
   S.player.cosmetics[c.type] = id;
-  return ok(c.name + ' active');
+  return ok(c.name + ' - activ');
 }
 
 // ---------- market ----------
@@ -278,12 +278,12 @@ function actBuyListing(lid) {
   spendCR(l.price, 'market');
   S.market.listings = S.market.listings.filter(x => x !== l);
   l.card.listed = null;
-  giveCard(l.card, 'market purchase');
+  giveCard(l.card, 'cumpărare din Piață');
   recordTrade(l.card, l.price);
   count('cardBought');
   missionProgress('buy_card', 1);
-  log('TRADE', `You bought ${cardLabel(l.card)} for ${fmt(l.price)} CR from ${(botById(l.seller) || { name: 'a trader' }).name}.`);
-  return ok('Purchased');
+  log('TRADE', `Ai cumpărat ${cardLabel(l.card)} cu ${fmt(l.price)} CR de la ${(botById(l.seller) || { name: 'un comerciant' }).name}.`);
+  return ok('Cumpărat');
 }
 function actListCard(nid, price, venue) {
   price = Math.floor(Number(price));
@@ -296,55 +296,55 @@ function actListCard(nid, price, venue) {
   n.listed = l.id;
   S.equipped = S.equipped.filter(id => id !== nid);
   S.market.listings.push(l);
-  log('TRADE', `Listed ${cardLabel(n)} for ${fmt(price)} CR on the ${venue === 'stand' ? 'your stand' : 'server market'} (fee ${fee} CR).`);
-  return ok('Listed');
+  log('TRADE', `Ai listat ${cardLabel(n)} la ${fmt(price)} CR ${venue === 'stand' ? 'pe standul tău' : 'pe Piața serverului'} (taxă ${fee} CR).`);
+  return ok('Listată');
 }
 function actCancelListing(lid) {
   const l = S.market.listings.find(x => x.id === lid && x.seller === 'player');
-  if (!l) return fail('Listing not found');
+  if (!l) return fail('Anunțul nu a fost găsit');
   const n = S.inv.find(x => x.id === l.cardId);
   if (n) n.listed = null;
   S.market.listings = S.market.listings.filter(x => x !== l);
-  return ok('Listing cancelled (fee not refunded)');
+  return ok('Anunț anulat (taxa nu se rambursează)');
 }
 function actBuildMarketStand() {
   const r = whyBuildMarketStand(); if (r) return fail(r);
   spendCR(CONFIG.MARKET.standCost, 'marketStand');
   S.market.stand = { level: 0, built: S.time };
-  log('TRADE', `Your Card Marketplace Stand is OPEN. You earn ${CONFIG.MARKET.standFee * 100}% of every trade routed through it.`);
-  return ok('Stand opened');
+  log('TRADE', `Standul tău din Piața de cărți este DESCHIS. Câștigi ${CONFIG.MARKET.standFee * 100}% din fiecare tranzacție care trece prin el.`);
+  return ok('Stand deschis');
 }
 function actUpgradeMarketStand() {
   const r = whyUpgradeMarketStand(); if (r) return fail(r);
   const nx = CONFIG.MARKET.standLevels[S.market.stand.level + 1];
   spendCR(nx.cost, 'marketStand');
   S.market.stand.level++;
-  log('TRADE', `Marketplace Stand upgraded to level ${S.market.stand.level + 1} (${nx.share * 100}% traffic).`);
-  return ok('Upgraded');
+  log('TRADE', `Standul din Piață a fost îmbunătățit la nivelul ${S.market.stand.level + 1} (${nx.share * 100}% din trafic).`);
+  return ok('Îmbunătățit');
 }
 function actDemolishMarketStand() {
-  if (!S.market.stand) return fail('No stand');
+  if (!S.market.stand) return fail('Nu ai un stand');
   let inv = CONFIG.MARKET.standCost;
   for (let i = 1; i <= S.market.stand.level; i++) inv += CONFIG.MARKET.standLevels[i].cost;
   const refund = Math.floor(inv * CONFIG.DEMOLISH_REFUND);
   S.market.stand = null;
   for (const l of S.market.listings) if (l.venue === 'stand') l.venue = 'server';
   addCR(refund, 'refund');
-  log('TRADE', `Marketplace Stand demolished: +${fmt(refund)} CR refund.`);
-  return ok('Demolished');
+  log('TRADE', `Standul din Piață a fost demolat: rambursare +${fmt(refund)} CR.`);
+  return ok('Demolat');
 }
 
 // ---------- missions & meta ----------
 function actClaimMission(i) {
   const m = S.missions.list[i];
-  if (!m) return fail('Mission not found');
-  if (m.claimed) return fail('Already claimed');
-  if (m.progress < m.target) return fail('Not complete yet');
+  if (!m) return fail('Misiunea nu a fost găsită');
+  if (m.claimed) return fail('Deja revendicată');
+  if (m.progress < m.target) return fail('Încă nu este finalizată');
   m.claimed = true;
   addDT(m.reward.dt); addCR(m.reward.cr, 'missions'); addShards(m.reward.shards);
-  const n = rollDrop(0.25, 'mission reward');
+  const n = rollDrop(0.25, 'recompensă de misiune');
   count('missionsDone');
-  return ok(`+${m.reward.dt} DT, +${fmt(m.reward.cr)} CR, +${m.reward.shards} shards${n ? ', +1 card!' : ''}`);
+  return ok(`+${m.reward.dt} DT, +${fmt(m.reward.cr)} CR, +${m.reward.shards} Fragmente${n ? ', +1 carte!' : ''}`);
 }
 function actRebirth() {
   const r = whyRebirth(); if (r) return fail(r);
@@ -353,22 +353,22 @@ function actRebirth() {
   p.math = CONFIG.START.math; p.trivia = CONFIG.START.trivia; p.speedPoints = 0;
   p.rating = CONFIG.START.rating; p.league = 0;
   S.stands = [];
-  log('SYSTEM', `NEURAL REBIRTH #${p.rebirths}: +${gain} Legacy (now ${p.legacy}, permanent +${Math.round(legacyBonus() * 100)}% training & CR). Stats and stands reset; cards, land, CR, guild and cosmetics kept.`);
-  return ok('Reborn');
+  log('SYSTEM', `RENAȘTERE NEURALĂ #${p.rebirths}: +${gain} Moștenire (acum ${p.legacy}, bonus permanent +${Math.round(legacyBonus() * 100)}% la antrenament și CR). Statisticile și standurile au fost resetate; cărțile, terenul, CR, breasla și elementele cosmetice se păstrează.`);
+  return ok('Renaștere neurală reușită');
 }
 function actSetName(name) {
   name = String(name || '').trim().replace(/[<>]/g, '');
-  if (name.length < 2 || name.length > 16) return fail('Name must be 2-16 characters');
+  if (name.length < 2 || name.length > 16) return fail('Numele trebuie să aibă între 2 și 16 caractere');
   S.player.name = name;
-  return ok('Name set');
+  return ok('Nume salvat');
 }
 
 // ---------- exploring land tiles ----------
 function tileCount() { return Math.floor(S.player.land / CONFIG.EXPLORE.tileSU); }
 function tilesExplored() { return Object.keys(S.player.tiles || {}).length; }
 function whyExplore(i) {
-  if (!Number.isInteger(i) || i < 0 || i >= tileCount()) return 'Tile not on your land';
-  if (S.player.tiles[i]) return 'Already explored';
+  if (!Number.isInteger(i) || i < 0 || i >= tileCount()) return 'Sectorul nu se află pe terenul tău';
+  if (S.player.tiles[i]) return 'Deja explorat';
   return '';
 }
 function actExplore(i) {
@@ -379,16 +379,16 @@ function actExplore(i) {
   let text = '', kind = e.kind;
   if (kind === 'dt') text = `+${addDT(randInt(e.min, e.max))} DT`;
   else if (kind === 'cr') text = `+${fmt(addCR(randInt(e.min, e.max), 'explore'))} CR`;
-  else if (kind === 'shards') text = `+${addShards(randInt(e.min, e.max))} shards`;
+  else if (kind === 'shards') text = `+${addShards(randInt(e.min, e.max))} Fragmente`;
   else if (kind === 'jackpot') text = `JACKPOT +${fmt(addCR(randInt(e.min, e.max), 'explore'))} CR`;
   else {
-    const n = giveCard(mintCard({}), 'land exploration');
-    if (n) text = `Card: ${cardLabel(n)}`;
-    else { kind = 'dt'; text = `+${addDT(5)} DT (inventory full)`; }
+    const n = giveCard(mintCard({}), 'explorare teren');
+    if (n) text = `Carte: ${cardLabel(n)}`;
+    else { kind = 'dt'; text = `+${addDT(5)} DT (inventar plin)`; }
   }
   S.player.tiles[i] = kind === 'card' ? 'n' : kind[0]; // 'n' = card (kept from v1 saves)
   count('tilesExplored');
-  if (kind === 'card' || kind === 'jackpot') log('SYSTEM', `Exploring sector #${i + 1}: ${text}`);
+  if (kind === 'card' || kind === 'jackpot') log('SYSTEM', `Explorare sector #${i + 1}: ${text}`);
   return Object.assign(ok(text), { kind });
 }
 function actExploreAll(max) {
@@ -400,9 +400,9 @@ function actExploreAll(max) {
     const r = actExplore(i);
     if (r.ok) { done++; if (r.kind === 'card') got.card++; if (r.kind === 'jackpot') got.j++; }
   }
-  if (!done) return fail('Nothing left to explore - buy more land');
-  log('SYSTEM', `Explored ${done} sectors.`);
-  return ok(`Explored ${done}: +${fmt(S.player.cr - crBefore)} CR, +${S.player.dt - dtBefore} DT, +${S.player.shards - shBefore} shards${got.card ? `, ${got.card} card${got.card > 1 ? 's' : ''}` : ''}${got.j ? `, ${got.j} jackpot` : ''}`);
+  if (!done) return fail('Nu mai e nimic de explorat - cumpără mai mult teren');
+  log('SYSTEM', `Sectoare explorate: ${done}.`);
+  return ok(`Sectoare explorate: ${done} · +${fmt(S.player.cr - crBefore)} CR, +${S.player.dt - dtBefore} DT, +${S.player.shards - shBefore} Fragmente${got.card ? `, cărți: ${got.card}` : ''}${got.j ? `, jackpot: ${got.j}` : ''}`);
 }
 
 // ---------- always-available income ----------
@@ -420,20 +420,20 @@ function dailyInfo(today) {
 function actClaimDaily(today) {
   today = today || todayStr();
   const d = dailyInfo(today);
-  if (d.claimed) return fail('Already claimed today - come back tomorrow');
+  if (d.claimed) return fail('Deja revendicat azi - revino mâine');
   S.player.daily = { last: today, streak: d.streak };
   addCR(d.cr, 'daily'); addShards(d.shards); addDT(d.dt);
   count('dailyClaims');
-  log('SYSTEM', `Daily bonus (day ${d.streak} in a row): +${fmt(d.cr)} CR, +${d.dt} DT${d.shards ? ', +' + d.shards + ' shards' : ''}.`);
-  return ok(`Day ${d.streak}: +${fmt(d.cr)} CR, +${d.dt} DT${d.shards ? ', +' + d.shards + ' shards' : ''}`);
+  log('SYSTEM', `Bonus zilnic (ziua ${d.streak} la rând): +${fmt(d.cr)} CR, +${d.dt} DT${d.shards ? ', +' + d.shards + ' Fragmente' : ''}.`);
+  return ok(`Ziua ${d.streak}: +${fmt(d.cr)} CR, +${d.dt} DT${d.shards ? ', +' + d.shards + ' Fragmente' : ''}`);
 }
 
 // free practice: YOU answer (no stamina, no fee), small CR per correct answer
 let PRACTICE = null; // not saved
 function whyPractice() {
-  if (PRACTICE && !PRACTICE.done) return 'Practice already running';
+  if (PRACTICE && !PRACTICE.done) return 'Antrenamentul liber este deja în desfășurare';
   const cd = S.player.practiceUntil - S.time;
-  if (cd > 0) return 'Next free practice in ' + fmtTime(cd);
+  if (cd > 0) return 'Următorul antrenament liber în ' + fmtTime(cd);
   return '';
 }
 function actStartPractice() {
@@ -443,11 +443,11 @@ function actStartPractice() {
   for (let i = 0; i < n; i++) qs.push(genQuestion(S.player.league, used, questionMode()));
   PRACTICE = { qs, i: 0, correct: 0, last: null, done: false, cr: 0 };
   S.player.practiceUntil = S.time + CONFIG.INCOME.practiceCooldownMs;
-  return ok('Practice started');
+  return ok('Antrenament liber început');
 }
 function practiceAnswer(choice) {
   const m = PRACTICE;
-  if (!m || m.done || m.i >= m.qs.length) return fail('No practice running');
+  if (!m || m.done || m.i >= m.qs.length) return fail('Niciun antrenament liber în desfășurare');
   const q = m.qs[m.i], right = checkAnswer(q, choice);
   if (right) m.correct++;
   m.last = { choice, right, answer: q.answer };
@@ -456,17 +456,17 @@ function practiceAnswer(choice) {
     m.done = true;
     m.cr = addCR(m.correct * CONFIG.INCOME.practiceCRPerCorrect * CONFIG.LEAGUES[S.player.league].reward, 'practice');
     count('practiceRuns');
-    log('ARENA', `Free practice: ${m.correct}/${m.qs.length} correct, +${fmt(m.cr)} CR.`);
+    log('ARENA', `Antrenament liber: ${m.correct}/${m.qs.length} corecte, +${fmt(m.cr)} CR.`);
   }
-  return ok(right ? 'Correct!' : 'Wrong - the answer was ' + q.answer);
+  return ok(right ? 'Corect!' : 'Greșit - răspunsul corect era ' + q.answer);
 }
 
 // emergency credits: only when you cannot afford a Multiplayer entry fee
 function rescueAmount() { return multiFee() * CONFIG.INCOME.rescueMult; }
 function whyRescue() {
-  if (S.player.cr >= multiFee()) return 'Only available when you cannot pay the Multiplayer entry fee';
+  if (S.player.cr >= multiFee()) return 'Disponibil doar când nu poți plăti taxa de intrare la Multiplayer';
   const cd = S.player.rescueUntil - S.time;
-  if (cd > 0) return 'Available again in ' + fmtTime(cd);
+  if (cd > 0) return 'Disponibil din nou în ' + fmtTime(cd);
   return '';
 }
 function actRescue() {
@@ -474,6 +474,6 @@ function actRescue() {
   const n = addCR(rescueAmount(), 'rescue');
   S.player.rescueUntil = S.time + CONFIG.INCOME.rescueCooldownMs;
   count('rescues');
-  log('SYSTEM', `Emergency credits: +${fmt(n)} CR.`);
-  return ok(`+${fmt(n)} CR emergency credits`);
+  log('SYSTEM', `Credite de urgență: +${fmt(n)} CR.`);
+  return ok(`+${fmt(n)} CR - credite de urgență`);
 }

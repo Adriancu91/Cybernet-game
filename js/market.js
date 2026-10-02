@@ -18,7 +18,7 @@ function standCommission(price, desc) {
     addCR(c, 'commission');
     S.market.standEarned += c;
     count('commissionTrades');
-    if (chance(0.25) || c >= 200) log('TRADE', `Your stand earned ${fmt(c)} CR commission (${desc}).`);
+    if (chance(0.25) || c >= 200) log('TRADE', `Standul tău a câștigat ${fmt(c)} CR comision (${desc}).`);
   }
   return c;
 }
@@ -45,7 +45,7 @@ function marketMinute(ms) {
     if (l.seller === 'player') {
       const n = S.inv.find(x => x.id === l.cardId);
       if (n) n.listed = null;
-      log('TRADE', `Your listing expired: ${n ? cardLabel(n) : 'item'} returned to inventory.`);
+      log('TRADE', `Anunțul tău a expirat: ${n ? cardLabel(n) : 'obiectul'} a revenit în inventar.`);
     }
   }
   // bots list new items
@@ -59,7 +59,7 @@ function marketMinute(ms) {
     if (chance(p)) {
       mk.listings = mk.listings.filter(x => x !== l);
       recordTrade(l.card, l.price);
-      if (l.venue === 'stand' && standActive()) standCommission(l.price, 'bot sale of ' + cardLabel(l.card));
+      if (l.venue === 'stand' && standActive()) standCommission(l.price, 'vânzare de la un bot: ' + cardLabel(l.card));
     }
   }
   // bot-to-bot trades happening across the net
@@ -71,7 +71,7 @@ function marketMinute(ms) {
     const fake = { type, plus, rarity, q: randRange(0.8, 1.2) };
     const price = Math.round(fairValue(fake) * randRange(0.8, 1.2));
     recordTrade(fake, price);
-    if (standActive() && chance(standShare())) standCommission(price, `bot trade ${rarityOf(rarity).name} ${cardType(type).name}${plus ? ' +' + plus : ''}`);
+    if (standActive() && chance(standShare())) standCommission(price, `tranzacție între boți: ${cardType(type).name} · ${rarityOf(rarity).name}${plus ? ' +' + plus : ''}`);
   }
   // player listings may sell
   for (const l of playerListings()) {
@@ -87,7 +87,7 @@ function marketMinute(ms) {
       recordTrade(n, l.price);
       addCR(l.price - fee, 'sales');
       count('cardSold');
-      log('TRADE', `SOLD ${cardLabel(n)} to ${pick(S.bots).name} for ${fmt(l.price)} CR (fee ${fmt(fee)}).`);
+      log('TRADE', `VÂNDUT: ${cardLabel(n)} către ${pick(S.bots).name} pentru ${fmt(l.price)} CR (taxă ${fmt(fee)}).`);
     }
   }
   // type demand drifts
@@ -101,40 +101,40 @@ function marketStep(dtMs) {
 // ---------- reasons ----------
 function whyBuyListing(lid) {
   const l = S.market.listings.find(x => x.id === lid);
-  if (!l) return 'Listing no longer available';
-  if (l.seller === 'player') return 'You cannot buy your own listing';
-  if (invFull()) return 'Inventory full';
-  if (!canPayCR(l.price)) return `Need ${fmt(l.price - S.player.cr)} CR more`;
+  if (!l) return 'Anunțul nu mai este disponibil';
+  if (l.seller === 'player') return 'Nu îți poți cumpăra propriul anunț';
+  if (invFull()) return 'Inventar plin';
+  if (!canPayCR(l.price)) return `Îți mai trebuie ${fmt(l.price - S.player.cr)} CR`;
   return '';
 }
 function listingFee(price) { return Math.max(1, Math.ceil(price * CONFIG.MARKET.listingFee)); }
 function whyList(nid, price, venue) {
   const n = S.inv.find(x => x.id === nid);
-  if (!n) return 'Select a card';
+  if (!n) return 'Selectează o carte';
   const r = cardStatusReason(n);
   if (r) return r;
-  if (!(Number.isInteger(price) && price >= 1)) return 'Enter a whole price of at least 1 CR';
-  if (price > 1e12) return 'Price too high';
-  if (playerListings().length >= CONFIG.MARKET.maxListings) return `Max ${CONFIG.MARKET.maxListings} active listings`;
-  if (venue === 'stand' && !standActive()) return 'You have no active Marketplace Stand';
-  if (!canPayCR(listingFee(price))) return `Listing fee ${fmt(listingFee(price))} CR`;
+  if (!(Number.isInteger(price) && price >= 1)) return 'Introdu un preț întreg de cel puțin 1 CR';
+  if (price > 1e12) return 'Preț prea mare';
+  if (playerListings().length >= CONFIG.MARKET.maxListings) return `Maximum ${CONFIG.MARKET.maxListings} anunțuri active`;
+  if (venue === 'stand' && !standActive()) return 'Nu ai un Stand de piață activ';
+  if (!canPayCR(listingFee(price))) return `Taxă de listare ${fmt(listingFee(price))} CR`;
   return '';
 }
 function whyBuildMarketStand() {
   const M = CONFIG.MARKET;
-  if (S.market.stand) return 'Already built';
-  if (S.player.league < M.standLeague) return `Requires ${CONFIG.LEAGUES[M.standLeague].name} league`;
-  if (serverFrozen()) return 'Infrastructure frozen: ' + fmtTime(S.server.freezeUntil - S.time);
-  if (landFree() < M.standLand) return `Need ${fmt(M.standLand - landFree())} more free land (SU)`;
-  if (!canPayCR(M.standCost)) return `Need ${fmt(M.standCost - S.player.cr)} CR more`;
+  if (S.market.stand) return 'Deja construit';
+  if (S.player.league < M.standLeague) return `Necesită liga ${CONFIG.LEAGUES[M.standLeague].name}`;
+  if (serverFrozen()) return 'Infrastructură înghețată: ' + fmtTime(S.server.freezeUntil - S.time);
+  if (landFree() < M.standLand) return `Îți mai trebuie ${fmt(M.standLand - landFree())} SU de teren liber`;
+  if (!canPayCR(M.standCost)) return `Îți mai trebuie ${fmt(M.standCost - S.player.cr)} CR`;
   return '';
 }
 function whyUpgradeMarketStand() {
   const M = CONFIG.MARKET, st = S.market.stand;
-  if (!st) return 'Build the stand first';
-  if (st.level >= M.standLevels.length - 1) return 'Max level';
-  if (serverFrozen()) return 'Infrastructure frozen: ' + fmtTime(S.server.freezeUntil - S.time);
+  if (!st) return 'Construiește mai întâi standul';
+  if (st.level >= M.standLevels.length - 1) return 'Nivel maxim';
+  if (serverFrozen()) return 'Infrastructură înghețată: ' + fmtTime(S.server.freezeUntil - S.time);
   const c = M.standLevels[st.level + 1].cost;
-  if (!canPayCR(c)) return `Need ${fmt(c - S.player.cr)} CR more`;
+  if (!canPayCR(c)) return `Îți mai trebuie ${fmt(c - S.player.cr)} CR`;
   return '';
 }

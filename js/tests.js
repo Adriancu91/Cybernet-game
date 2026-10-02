@@ -282,11 +282,11 @@ function runSelfTests(opts) {
     const crit1 = counter('criticalEvents');
     checkServerCapacity(); checkServerCapacity();
     assert(counter('criticalEvents') === crit1, 'triggered twice');
-    assert(whyBuyLand(500).startsWith('Infrastructure frozen'), 'big plot not frozen');
+    assert(whyBuyLand(500).startsWith('Infrastructură înghețată'), 'big plot not frozen');
     assert(whyBuyLand(10) === '', 'small plot should still work');
     S.player.league = 4; S.player.land = 5000;
     actBuildStand(); const s = S.stands[0]; s.tier = 1;
-    assert(whyUpgradeStand(s.id).startsWith('Infrastructure frozen'), 'x6 upgrade not frozen');
+    assert(whyUpgradeStand(s.id).startsWith('Infrastructură înghețată'), 'x6 upgrade not frozen');
     const total = sv.total;
     simulate(CONFIG.SERVER.freezeMs + 2000);
     assert(sv.state === 'NORMAL' && sv.total === Math.floor(total * 1.5), 'no expansion after window');

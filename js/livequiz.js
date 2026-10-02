@@ -1,14 +1,14 @@
 'use strict';
 /* ============================================================
-   LIVE QUIZ — fresh trivia every day, generated from Wikidata
-   (free, CC0). Questions are cached on this device for 24 h and
-   mixed into the built-in bank; if the network is unavailable the
-   game simply keeps using the local bank.
-   Stored OUTSIDE the save on purpose: it never affects the save,
-   offline simulation or the self-tests.
+   LIVE QUIZ — întrebări noi în fiecare zi, generate din Wikidata
+   (gratuit, CC0), cu etichete în română (rezervă: engleză).
+   Sunt păstrate pe dispozitiv 24 h și amestecate cu banca internă;
+   fără rețea jocul folosește doar banca locală.
+   Stocate INTENȚIONAT în afara salvării: nu afectează salvarea,
+   simularea offline sau autotestele.
    ============================================================ */
 const LiveQuiz = {
-  KEY: 'cybernet_live_quiz_v1',
+  KEY: 'cybernet_live_quiz_v2_ro',
   TTL: 24 * 3600 * 1000,
   PER_DAY: 120,
   pool: [],
@@ -19,6 +19,7 @@ const LiveQuiz = {
     try {
       const raw = typeof localStorage !== 'undefined' && localStorage.getItem(this.KEY);
       if (raw) { const d = JSON.parse(raw); this.pool = d.pool || []; this.updated = d.updated || 0; }
+      if (typeof localStorage !== 'undefined') localStorage.removeItem('cybernet_live_quiz_v1'); // vechea memorie, în engleză
     } catch (e) { this.pool = []; }
   },
   save() { try { localStorage.setItem(this.KEY, JSON.stringify({ pool: this.pool, updated: this.updated })); } catch (e) { } },
@@ -38,32 +39,32 @@ const LiveQuiz = {
   shuffleOwn(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(this.rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; },
 
   async capitals() {
-    const rows = await this.sparql(`SELECT ?cLabel ?capLabel ?sl WHERE { ?c wdt:P31 wd:Q6256; wdt:P36 ?cap; wikibase:sitelinks ?sl. SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } ORDER BY DESC(?sl)`);
+    const rows = await this.sparql(`SELECT ?cLabel ?capLabel ?sl WHERE { ?c wdt:P31 wd:Q6256; wdt:P36 ?cap; wikibase:sitelinks ?sl. SERVICE wikibase:label { bd:serviceParam wikibase:language "ro,en". } } ORDER BY DESC(?sl)`);
     const seen = new Set(), list = [];
     for (const r of rows) {
       const c = r.cLabel && r.cLabel.value, cap = r.capLabel && r.capLabel.value;
-      if (!c || !cap || seen.has(c) || /^Q\d+$/.test(cap)) continue;
+      if (!c || !cap || seen.has(c) || /^Q\d+$/.test(c) || /^Q\d+$/.test(cap)) continue;
       seen.add(c); list.push([c, cap]);
     }
     const caps = list.map(x => x[1]), countries = list.map(x => x[0]);
     const out = [];
     list.forEach(([c, cap], i) => {
       const d = this.diffByRank(i, list.length);
-      out.push({ id: 'wcap:' + c, cat: 'Geography', diff: d, text: `What is the capital of ${c}?`, answer: cap, options: [cap].concat(this.pickN(caps, 3, cap)) });
-      if (i < 120) out.push({ id: 'wcty:' + cap, cat: 'Geography', diff: Math.min(10, d + 1), text: `${cap} is the capital of which country?`, answer: c, options: [c].concat(this.pickN(countries, 3, c)) });
+      out.push({ id: 'wcap:' + c, cat: 'Geografie', diff: d, text: `Care este capitala statului ${c}?`, answer: cap, options: [cap].concat(this.pickN(caps, 3, cap)) });
+      if (i < 120) out.push({ id: 'wcty:' + cap, cat: 'Geografie', diff: Math.min(10, d + 1), text: `${cap} este capitala cărei țări?`, answer: c, options: [c].concat(this.pickN(countries, 3, c)) });
     });
     return out;
   },
   async elements() {
-    const rows = await this.sparql(`SELECT ?eLabel ?sym ?num WHERE { ?e wdt:P31 wd:Q11344; wdt:P246 ?sym; wdt:P1086 ?num. FILTER(?num <= 92) SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } ORDER BY ?num`);
+    const rows = await this.sparql(`SELECT ?eLabel ?sym ?num WHERE { ?e wdt:P31 wd:Q11344; wdt:P246 ?sym; wdt:P1086 ?num. FILTER(?num <= 92) SERVICE wikibase:label { bd:serviceParam wikibase:language "ro,en". } } ORDER BY ?num`);
     const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
     const list = rows.map(r => [cap(r.eLabel.value), r.sym.value, Number(r.num.value)]).filter(x => x[0] && x[1] && !/^Q\d+$/.test(x[0]));
     const names = list.map(x => x[0]), syms = list.map(x => x[1]);
     const out = [];
     for (const [name, sym, num] of list) {
       const d = clamp(3 + Math.floor(num / 12), 3, 10);
-      out.push({ id: 'wsym:' + sym, cat: 'Science', diff: d, text: `Which chemical element has the symbol ${sym}?`, answer: name, options: [name].concat(this.pickN(names, 3, name)) });
-      out.push({ id: 'wel:' + sym, cat: 'Science', diff: Math.min(10, d + 1), text: `What is the chemical symbol of ${name}?`, answer: sym, options: [sym].concat(this.pickN(syms, 3, sym)) });
+      out.push({ id: 'wsym:' + sym, cat: 'Știință', diff: d, text: `Ce element chimic are simbolul ${sym}?`, answer: name, options: [name].concat(this.pickN(names, 3, name)) });
+      out.push({ id: 'wel:' + sym, cat: 'Știință', diff: Math.min(10, d + 1), text: `Care este simbolul chimic al elementului ${name}?`, answer: sym, options: [sym].concat(this.pickN(syms, 3, sym)) });
     }
     return out;
   },
@@ -82,7 +83,7 @@ const LiveQuiz = {
         this.pool = this.shuffleOwn(all).slice(0, this.PER_DAY).map(q => Object.assign(q, { options: this.shuffleOwn(q.options) }));
         this.updated = Date.now();
         this.save();
-        if (typeof log === 'function' && S) log('SYSTEM', `Live quiz updated: ${this.pool.length} fresh questions from Wikidata.`);
+        if (typeof log === 'function' && S) log('SYSTEM', `Quiz live actualizat: ${this.pool.length} întrebări noi din Wikidata.`);
       }
     } catch (e) { /* offline: keep the local bank */ }
     this.loading = false;

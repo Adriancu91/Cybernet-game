@@ -34,17 +34,18 @@ const CLOUD = {
   store() { try { if (this.acct) localStorage.setItem(this.KEY, JSON.stringify(this.acct)); else localStorage.removeItem(this.KEY); } catch (e) { } },
 
   ERRORS: {
-    taken: 'This ID is already taken - pick another one.',
-    bad_id: 'ID: 3-20 characters, letters, digits, . _ - only.',
-    bad_pin: 'PIN: 4 to 8 digits.',
-    badpin: 'Wrong PIN.',
-    locked: 'Too many wrong PINs - try again in 15 minutes.',
-    nouser: 'No account with this ID.',
-    conflict: 'Another device saved newer progress.',
-    too_big: 'Save is too big.',
-    network: 'No connection to the server - your progress is still saved on this device.',
+    taken: 'Acest ID este deja folosit - alege altul.',
+    bad_id: 'ID: 3-20 caractere, doar litere, cifre și . _ -',
+    bad_pin: 'PIN: între 4 și 8 cifre.',
+    badpin: 'PIN greșit.',
+    locked: 'Prea multe PIN-uri greșite - încearcă din nou peste 15 minute.',
+    nouser: 'Nu există niciun cont cu acest ID.',
+    conflict: 'Alt dispozitiv a salvat un progres mai nou.',
+    too_big: 'Salvarea este prea mare.',
+    not_logged_in: 'Nu ești autentificat.',
+    network: 'Nu există conexiune cu serverul - progresul tău rămâne salvat pe acest dispozitiv.',
   },
-  errText(code) { return this.ERRORS[code] || ('Server error: ' + code); },
+  errText(code) { return this.ERRORS[code] || (/^bad save on server/.test(code) ? 'Salvarea de pe server este coruptă: ' + code.replace(/^bad save on server: /, '') : 'Eroare de server: ' + code); },
 
   async rpc(fn, args) {
     const base = CLOUD_CONFIG.url.replace(/\/$/, '');
@@ -68,7 +69,7 @@ const CLOUD = {
     if (!res.ok) return res;
     this.acct = { user, pin, version: 0, lastSync: 0 };
     this.store();
-    S.player.name = S.player.name === 'You' ? user.slice(0, 16) : S.player.name;
+    S.player.name = (S.player.name === 'You' || S.player.name === 'Tu') ? user.slice(0, 16) : S.player.name;
     return this.sync(true);
   },
   // log in; returns { ok, save } where save is the cloud progress (or null for an empty account)

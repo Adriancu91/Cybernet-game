@@ -62,18 +62,18 @@ function updatePlayerLeague() {
   while (p.league < L.length - 1 && p.rating >= L[p.league + 1].min) p.league++;
   while (p.league > 0 && p.rating < L[p.league].min - CONFIG.DEMOTION_BUFFER) p.league--;
   if (p.league > old) {
-    log('ARENA', `PROMOTED to ${L[p.league].name} league! Soft cap now ${fmt(softCap())}.`);
+    log('ARENA', `PROMOVAT în liga ${L[p.league].name}! Plafonul flexibil este acum ${fmt(softCap())}.`);
     if (p.league > p.peakLeague) p.peakLeague = p.league;
-  } else if (p.league < old) log('ARENA', `Demoted to ${L[p.league].name} league.`);
+  } else if (p.league < old) log('ARENA', `Retrogradat în liga ${L[p.league].name}.`);
 }
 
 // ---------- event of the week ----------
 const WEEKLY_EVENTS = [
-  { id: 'train_frenzy', name: 'Training Frenzy', desc: '+25% training gain for everyone' },
-  { id: 'math_week', name: 'Math Week', desc: 'Arena questions are math only' },
-  { id: 'double_drops', name: 'Double Drops', desc: 'Card drop chances x2, half of drops are the featured type' },
-  { id: 'trivia_week', name: 'Trivia Week', desc: 'Arena questions are trivia only' },
-  { id: 'market_boom', name: 'Market Boom', desc: 'Bot trading volume x1.5' },
+  { id: 'train_frenzy', name: 'Frenezia antrenamentului', desc: '+25% câștig la antrenament pentru toată lumea' },
+  { id: 'math_week', name: 'Săptămâna matematicii', desc: 'Întrebările din Arenă sunt doar de matematică' },
+  { id: 'double_drops', name: 'Recompense duble', desc: 'Șansele de a primi cărți x2; jumătate dintre ele sunt de tipul din prim-plan' },
+  { id: 'trivia_week', name: 'Săptămâna culturii generale', desc: 'Întrebările din Arenă sunt doar de cultură generală' },
+  { id: 'market_boom', name: 'Boom pe Piață', desc: 'Volumul tranzacțiilor boților x1,5' },
 ];
 function currentEvent() {
   const week = Math.floor(S.time / (7 * CONFIG.DAY));
@@ -186,7 +186,7 @@ function checkServerCapacity() {
     sv.freezeUntil = S.time + CONFIG.SERVER.freezeMs;
     sv.alarmSeen = false;
     count('criticalEvents');
-    log('SERVER', `!! SERVER CAPACITY CRITICAL - free space ${fmtPct((1 - usedRatio()) * 100)}. Heavy infrastructure frozen for ${fmtTime(CONFIG.SERVER.freezeMs)}.`);
+    log('SERVER', `!! CAPACITATEA SERVERULUI ESTE CRITICĂ - spațiu liber ${fmtPct((1 - usedRatio()) * 100)}. Infrastructura grea este înghețată pentru ${fmtTime(CONFIG.SERVER.freezeMs)}.`);
   }
 }
 function serverStep() {
@@ -198,7 +198,7 @@ function serverStep() {
     sv.expansions++;
     count('expansions');
     sv.history.push({ t: S.time, total: sv.total, used: usedSpace() });
-    log('SERVER', `Rebalancing done. Global capacity expanded ${fmt(old)} -> ${fmt(sv.total)} SU (expansion #${sv.expansions}).`);
+    log('SERVER', `Reechilibrare încheiată. Capacitatea globală a crescut de la ${fmt(old)} la ${fmt(sv.total)} SU (extinderea #${sv.expansions}).`);
   }
   checkServerCapacity();
 }
@@ -260,7 +260,7 @@ function step(dtMs) {
       if (pay > 0) spendCR(pay, 'upkeep');
       if (pay < due) {
         e.debt += due - pay; e.offline = true;
-        log('SYSTEM', `Not enough CR for upkeep - structures OFFLINE until ${fmt(e.debt)} CR debt is paid (paid automatically from income).`);
+        log('SYSTEM', `CR insuficienți pentru întreținere - structurile sunt OFFLINE până la achitarea datoriei de ${fmt(e.debt)} CR (se plătește automat din venituri).`);
       }
     }
   }

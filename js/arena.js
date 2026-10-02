@@ -35,14 +35,14 @@ function arenaBusy() { return !!(ARENA && ARENA.phase !== 'done'); }
 
 // ---------- reasons ----------
 function whySolo() {
-  if (arenaBusy()) return 'A match is already running';
-  if (S.player.stamina < 1) return 'No stamina - next in ' + fmtTime(CONFIG.SOLO.staminaRegenMs - S.player.staminaAcc);
+  if (arenaBusy()) return 'Un meci este deja în desfășurare';
+  if (S.player.stamina < 1) return 'Fără stamina - următoarea în ' + fmtTime(CONFIG.SOLO.staminaRegenMs - S.player.staminaAcc);
   return '';
 }
 function multiFee() { return CONFIG.LEAGUES[S.player.league].fee; }
 function whyMulti() {
-  if (arenaBusy()) return 'A match is already running';
-  if (!canPayCR(multiFee())) return `Entry fee ${fmt(multiFee())} CR - need ${fmt(multiFee() - S.player.cr)} more`;
+  if (arenaBusy()) return 'Un meci este deja în desfășurare';
+  if (!canPayCR(multiFee())) return `Taxă de intrare ${fmt(multiFee())} CR - îți mai trebuie ${fmt(multiFee() - S.player.cr)} CR`;
   return '';
 }
 
@@ -89,7 +89,7 @@ function startSolo(now) {
   S.player.stamina--;
   if (S.player.stamina === CONFIG.SOLO.staminaMax - 1) S.player.staminaAcc = 0;
   ARENA = createMatch('solo', now);
-  log('ARENA', `Solo Arena started (${CONFIG.LEAGUES[ARENA.league].name}). ${CONFIG.SOLO.lives} lives, ${ARENA.rounds} rounds.`);
+  log('ARENA', `Arenă Solo începută (liga ${CONFIG.LEAGUES[ARENA.league].name}). Vieți: ${CONFIG.SOLO.lives}, runde: ${ARENA.rounds}.`);
   return { ok: true };
 }
 function startMulti(now) {
@@ -98,7 +98,7 @@ function startMulti(now) {
   ARENA = createMatch('multi', now);
   count('multiPlayed');
   missionProgress('multi_play', 1);
-  log('ARENA', `Multiplayer lobby: ${ARENA.parts.length} players, prize pool ${fmt(ARENA.pool)} CR (entry ${fmt(ARENA.fee)} CR).`);
+  log('ARENA', `Lobby Multiplayer - jucători: ${ARENA.parts.length}, fond de premii ${fmt(ARENA.pool)} CR (taxă de intrare ${fmt(ARENA.fee)} CR).`);
   return { ok: true };
 }
 
@@ -129,7 +129,7 @@ function applyAnswer(m, p, correct, t, timeout, choice, human) {
   p.score += pts;
   if (correct) p.correct++;
   if (correct && p.isPlayer && chance(CONFIG.LOOT.perCorrect)) {
-    const d = rollLoot(CONFIG.LOOT.cache, m.league, 'Data Cache');
+    const d = rollLoot(CONFIG.LOOT.cache, m.league, 'Cache de date');
     if (d) { (m.loot = m.loot || []).push(d); m.lastLoot = { text: d.text, round: m.round }; }
   }
 }
@@ -140,14 +140,14 @@ function rollLoot(table, league, source) {
   let text = '';
   if (e.kind === 'dt') { const n = addDT(randInt(e.min, e.max)); text = `+${n} DT`; }
   else if (e.kind === 'cr') { const n = addCR(randInt(e.min, e.max) * L.reward, 'loot'); text = `+${fmt(n)} CR`; }
-  else if (e.kind === 'shards') { const n = addShards(randInt(e.min, e.max)); text = `+${n} shards`; }
+  else if (e.kind === 'shards') { const n = addShards(randInt(e.min, e.max)); text = `+${n} Fragmente`; }
   else if (e.kind === 'stamina') {
     if (S.player.stamina < CONFIG.SOLO.staminaMax) { S.player.stamina++; text = '+1 stamina'; }
     else { const n = addDT(10); text = `+${n} DT`; }
   } else if (e.kind === 'card') {
     const n = giveCard(mintCard(S.player.league >= 3 && chance(0.15) ? { plus: 1 } : {}), source.toLowerCase());
     if (!n) return null;
-    text = `Card: ${cardLabel(n)}`;
+    text = `Carte: ${cardLabel(n)}`;
     return { kind: 'card', text, card: n, source };
   }
   count('lootDrops');
@@ -157,15 +157,15 @@ function rollLoot(table, league, source) {
 function rollCrate(m, good) {
   const p = (m.type === 'solo' ? CONFIG.LOOT.crateSolo : CONFIG.LOOT.crateMulti) + (good ? CONFIG.LOOT.crateWinBonus : 0);
   if (!chance(p)) return null;
-  return rollLoot(CONFIG.LOOT.table, m.league, 'Loot crate');
+  return rollLoot(CONFIG.LOOT.table, m.league, 'Ladă de pradă');
 }
 function canOverride(m, now) {
-  if (!m || m.phase !== 'question') return 'No active question';
-  if (m.overridesLeft <= 0) return 'No overrides left';
-  if (m.override) return 'Override already active';
-  if (m.overrideRound === m.round) return 'Max 1 override per round';
+  if (!m || m.phase !== 'question') return 'Nicio întrebare activă';
+  if (m.overridesLeft <= 0) return 'Nu mai ai Intervenții umane';
+  if (m.override) return 'Intervenția umană este deja activă';
+  if (m.overrideRound === m.round) return 'Maximum o Intervenție umană pe rundă';
   const me = m.parts[0];
-  if (me.answered) return 'Your AI already answered this round';
+  if (me.answered) return 'AI-ul tău a răspuns deja în această rundă';
   return '';
 }
 function activateOverride(m, now) {
@@ -233,12 +233,12 @@ function finishMatch(m) {
       res.dt = addDT(CONFIG.SOLO.winDT);
       count('soloWins'); missionProgress('solo_win', 1);
       res.energy = addAIEnergy(CONFIG.AI_LAB.winEnergySolo);
-      if (me.correct === m.rounds) { count('soloPerfect'); res.card = rollDrop(CONFIG.SOLO.cardDropPerfect, 'perfect solo run'); }
+      if (me.correct === m.rounds) { count('soloPerfect'); res.card = rollDrop(CONFIG.SOLO.cardDropPerfect, 'meci solo perfect'); }
     } else {
       res.cr = addCR(me.correct * CONFIG.SOLO.failCRPerCorrect, 'solo');
     }
     res.tax = guildTax(res.cr, 'your');
-    log('ARENA', `Solo ${win ? 'WON' : 'failed'}: ${me.correct}/${m.round} correct, +${fmt(res.cr)} CR${res.dt ? ', +' + res.dt + ' DT' : ''}.`);
+    log('ARENA', `Solo ${win ? 'CÂȘTIGAT' : 'eșuat'}: ${me.correct}/${m.round} corecte, +${fmt(res.cr)} CR${res.dt ? ', +' + res.dt + ' DT' : ''}.`);
   } else {
     const sorted = m.parts.slice().sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
     const place = sorted.indexOf(me) + 1;
@@ -246,7 +246,7 @@ function finishMatch(m) {
     const sum = m.parts.reduce((s, p) => s + p.score, 0);
     if (sum === 0) {
       res.refund = addCR(m.fee, 'refund');
-      log('ARENA', 'Nobody scored - entry fees refunded.');
+      log('ARENA', 'Nimeni nu a punctat - taxele de intrare au fost rambursate.');
     } else {
       const share = Math.floor(m.pool * me.score / sum);
       res.bonus = Math.floor(share * (crMultiplier() - 1));
@@ -275,10 +275,10 @@ function finishMatch(m) {
       res.dt = addDT(dts[place - 1]);
       missionProgress('multi_top3', 1);
       res.energy = addAIEnergy(CONFIG.AI_LAB.winEnergyMulti);
-      res.card = rollDrop(CONFIG.MULTI.drop[place - 1], `Multiplayer #${place}`);
+      res.card = rollDrop(CONFIG.MULTI.drop[place - 1], `locul ${place} la Multiplayer`);
     }
     if (place === 1) count('multiWins');
-    log('ARENA', `Multiplayer finished #${place}/${m.parts.length}: ${me.correct}/${m.rounds} correct, +${fmt(res.cr)} CR, rating ${old} -> ${S.player.rating} (${delta >= 0 ? '+' : ''}${delta}).`);
+    log('ARENA', `Multiplayer încheiat pe locul ${place}/${m.parts.length}: ${me.correct}/${m.rounds} corecte, +${fmt(res.cr)} CR, rating ${old} -> ${S.player.rating} (${delta >= 0 ? '+' : ''}${delta}).`);
   }
   const good = m.type === 'solo' ? res.win : res.place <= 3;
   const crate = rollCrate(m, good);
