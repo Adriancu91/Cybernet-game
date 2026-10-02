@@ -8,6 +8,9 @@ Un joc de strategie și comerț pentru browser, pentru un singur jucător, cu as
 
 | Sistem | Pe scurt |
 |---|---|
+| Quiz Rapid | Modul principal: **tu** răspunzi la 10 întrebări (15 s fiecare), combo ×1 → ×1,5 → ×2 → ×3, ajutoare „🤖 Întreabă AI-ul” (corect cu probabilitatea dată de statisticile AI-ului tău; +1 folosire cu o carte Nucleu echipată) și „✂ 50/50”. CR, DT, record personal; 10/10 dă energie pentru Laboratorul AI și o șansă de carte. Primele 10 jocuri pe zi dau recompense întregi, apoi 25%. |
+| Supraviețuire | Aceleași întrebări și ajutoare, 3 vieți, dificultatea crește cu 1 la fiecare 5 răspunsuri corecte (maximum 10), record personal. |
+| Deblocare progresivă | Un jucător nou vede doar antrenamentul AI, Arena (Quiz Rapid, Supraviețuire, bonus zilnic, Solo) și Cărțile; restul se deblochează după numărul de jocuri (`CONFIG.UNLOCK`). Cardul „Următorul pas” sugerează mereu o singură acțiune concretă. Salvările vechi cu progres primesc totul deblocat. |
 | AI de companie | IQ la matematică, bază de date de cultură generală, viteză de procesare (ms, minim 150 ms). Antrenamentul folosește Tokeni de date (DT), cu randament descrescător peste un plafon pe ligă. |
 | Standuri de antrenament | De la x2 la x10 pe terenul tău, maximum 3, întreținere pe oră, nivelurile superioare depind de ligă. |
 | Arenă | Solo (10 runde, 3 vieți, stamina) și Multiplayer (5–9 boți apropiați de ratingul tău, runde live, premiul împărțit după scor). 2 intervenții umane (Human Override) pe meci. |
@@ -45,6 +48,7 @@ js/market.js      piața boților, ofertele jucătorului, standul de piață
 js/meta.js        misiuni, realizări, sezoane, prestigiu, clasamente
 js/arena.js       meciuri, modelul de răspuns al AI-ului, intervenția umană, rating
 js/actions.js     fiecare acțiune a jucătorului (validare -> plată -> aplicare -> jurnal)
+js/quick.js       Quiz Rapid, Supraviețuire, deblocarea progresivă și „Următorul pas”
 js/art.js         grafică SVG procedurală: cărți, AI de companie, embleme, iconițe, hartă, grafice
 js/tests.js       autoteste
 js/ui.js          afișare și interacțiune

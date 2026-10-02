@@ -233,6 +233,40 @@ const CONFIG = {
     rescueCooldownMs: 4 * 3600000,
   },
 
+  // ---------- Quiz Rapid & Supraviețuire (JUCĂTORUL răspunde) ----------
+  QUICK: {
+    questions: 10,             // întrebări într-un Quiz Rapid
+    timeMs: 15000,             // timp per întrebare; expirat = greșit
+    revealOkMs: 900,           // cât stă afișat feedbackul după un răspuns corect
+    revealBadMs: 1700,         // ... și după unul greșit (să vezi răspunsul corect)
+    crPerCorrect: 10,          // CR per răspuns corect = bază x recompensa ligii x combo (x bonusul cărților)
+    dtPerCorrect: 1,
+    combo: [1, 1.5, 2, 3],     // multiplicator combo; crește la fiecare `comboEvery` răspunsuri corecte la rând
+    comboEvery: 2,
+    pointsBase: 100,           // scor per răspuns corect (x combo), plus bonus de viteză
+    pointsSpeed: 50,
+    aiUses: 1,                 // „Întreabă AI-ul” pe joc
+    coreBonusAI: 1,            // +1 folosire dacă ai o carte Nucleu echipată
+    fiftyUses: 1,              // „50/50” pe joc
+    perfectCard: 0.08,         // 10/10: șansă de carte
+    perfectEnergy: 1,          // 10/10: +1 energie Laborator AI (respectă plafonul)
+    dailyFull: 10,             // primele 10 jocuri pe zi dau recompense întregi
+    reducedMult: 0.25,         // după aceea: 25%
+    survival: { lives: 3, crPerCorrect: 8, dtPerCorrect: 1, diffEvery: 5, maxDiff: 10 },
+  },
+
+  // ---------- deblocare progresivă: câte jocuri (Quiz Rapid + Supraviețuire + Solo + Multiplayer) ----------
+  UNLOCK: {
+    multi: 2,                  // Arena Multiplayer
+    market: 3,                 // Piața
+    ai: 4,                     // Laboratorul AI
+    album: 5,                  // Albumul de cărți
+    stands: 6,                 // Standuri de antrenament (și economia lor)
+    land: 7,                   // Terenul și serverul global
+    season: 9,                 // Sezon, misiuni, clasamente, realizări
+    guild: 12,                 // Breasla
+  },
+
   // ---------- AI Lab (training rounds with the real AI) ----------
   AI_LAB: {
     energyMax: 3,

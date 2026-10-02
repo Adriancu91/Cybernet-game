@@ -87,8 +87,9 @@ function setPetState(state, ms) {
 function htmlTop() {
   const p = S.player, sv = S.server, used = usedSpace(), ratio = used / sv.total, L = CONFIG.LEAGUES[p.league];
   const crit = sv.state === 'CRITICAL';
+  const showNet = isUnlocked('land'), showLand = isUnlocked('stands') || showNet, showLeague = isUnlocked('multi');
   return `<div class="logo" data-act="logoTap">CYBER<span>NET</span><small>AI ACADEMY</small></div>
-  <div class="netbar">
+  ${showNet ? `<div class="netbar">
     <span class="dim">REȚEA GLOBALĂ</span>
     <div class="meter" title="Folosit ${fmt(used)} / ${fmt(sv.total)} SU"><i class="${ratio > 0.45 ? 'hot' : ''}" style="width:${(ratio * 100).toFixed(1)}%"></i><span class="mark" style="left:${CONFIG.SERVER.criticalRatio * 100}%"></span></div>
     <span>${fmt(used)}/${fmt(sv.total)} SU</span>
@@ -96,20 +97,20 @@ function htmlTop() {
     <span class="dim">teren <b class="cr">${landPrice()}</b> CR/SU</span>
     <span class="dim">extinderi <b>${sv.expansions}</b></span>
     <span class="state ${crit ? 'crit blink' : 'ok'}">${crit ? 'CRITIC' : 'NORMAL'}</span>
-  </div>
+  </div>` : '<div class="netbar"></div>'}
   <div class="wallet">
     <span class="pill cr" title="Credite">${ic('cr')}<b>${fmt(p.cr)}</b></span>
     <span class="pill dtc" title="Tokeni de date">${ic('dt')}<b>${p.dt}</b><span class="dim tiny">/${CONFIG.DT.stockCap}</span></span>
-    <span class="pill landc" title="Terenul tău: liber / deținut">${ic('land')}<b>${fmt(landFree())}</b><span class="dim tiny">/${fmt(p.land)}</span></span>
+    ${showLand ? `<span class="pill landc" title="Terenul tău: liber / deținut">${ic('land')}<b>${fmt(landFree())}</b><span class="dim tiny">/${fmt(p.land)}</span></span>` : ''}
     <span class="pill shardc" title="Fragmente">${ic('shard')}<b>${fmt(p.shards)}</b></span>
-    <span class="pill league-pill" style="color:${L.color};border-color:${L.color}" title="Ligă și rating">${ic('rating')}${L.name} <span class="dim">${p.rating}</span></span>
+    ${showLeague ? `<span class="pill league-pill" style="color:${L.color};border-color:${L.color}" title="Ligă și rating">${ic('rating')}${L.name} <span class="dim">${p.rating}</span></span>` : ''}
     ${CLOUD.enabled() ? `<button class="pill acct-pill ${CLOUD.loggedIn() ? (CLOUD.status === 'conflict' || CLOUD.status === 'error' ? 'warn' : 'good') : ''}" data-act="openAccount" title="Cont cloud">☁ ${CLOUD.loggedIn() ? esc(CLOUD.acct.user) + (CLOUD.status === 'conflict' ? ' !' : '') : 'Conectare'}</button>` : ''}
     <button class="iconbtn" data-act="openSettings" aria-label="Setări">${GEAR}</button>
   </div>`;
 }
 function htmlCritical() {
   const sv = S.server;
-  if (sv.state !== 'CRITICAL' || UI.critDismissed) return '';
+  if (sv.state !== 'CRITICAL' || UI.critDismissed || !isUnlocked('land')) return '';
   return `<span class="dot blink"></span><span>CAPACITATE SERVER CRITICĂ — infrastructura grea este înghețată ${cd(sv.freezeUntil)} — spațiul global se va extinde cu +50%</span><button class="iconbtn right" style="width:30px;height:30px" data-act="dismissCrit" aria-label="Închide">✕</button>`;
 }
 
@@ -149,17 +150,18 @@ function htmlLeft() {
   <div id="petstage" class="pet-stage ${UI.petState}">${Art.pet(lv.level, colors)}</div>
   <div class="row between"><button class="btn sm" data-act="rename" title="Redenumește">${esc(p.name)} ${p.cosmetics.badge !== 'badge_none' ? Art.badge(p.cosmetics.badge, 16) : ''}</button><span class="dim small">Nivel AI <b class="good">${lv.level}</b>${p.legacy ? ` · Moștenire ${p.legacy}` : ''}</span></div>
   <div class="xp" title="Progres spre nivelul următor" style="margin:6px 0 4px"><i style="width:${(lv.progress * 100).toFixed(1)}%"></i></div>
+  <div class="tiny ns-hint">Un AI antrenat îți dă sugestii mai bune la <b>🤖 Întreabă AI-ul</b> și joacă singur în Arena Solo.</div>
   <div class="tiny dim">Plafon în liga ${leagueName(p.league)}: <b>${fmt(cap)}</b> — urcă în ligi superioare ca să-l crești.</div>
   ${stat('math', 'IQ matematic', 'math', p.math, fmt(p.math), capBar(p.math))}
   ${stat('trivia', 'Bază de cunoștințe', 'trivia', p.trivia, fmt(p.trivia), capBar(p.trivia))}
   ${stat('speed', 'Procesare', 'speed', p.speedPoints, `${ms} ms`, speedBar + `<div class="tiny dim">bază ${Math.round(msBase)} ms · minim ${CONFIG.PET.speedFloorMs} ms${b.eff.speed > 0 ? ` · cărți −${b.eff.speed.toFixed(1)}%` : ''}</div>`)}
-  <h4 style="margin-top:10px">Antrenează pe</h4><div class="row">${chips}</div>
+  ${S.stands.length ? `<h4 style="margin-top:10px">Antrenează pe</h4><div class="row">${chips}</div>` : ''}
   <div class="sep"></div>
   <div class="row between"><span>${ic('dt')} <b class="dtc">${p.dt}</b><span class="dim">/${CONFIG.DT.stockCap} DT</span></span><span class="small dim">${nextDT}</span></div>
   <div class="row" style="margin-top:6px"><span class="small dim">Cumpără DT:</span>${dtBuy}</div>
   <div class="tiny mute">Prețul crește cu 1% pentru fiecare DT cumpărat în ultimele 24 h (cumpărați: ${dtRecentBought()}).</div>
   <div class="sep"></div>
-  <h3>${ic('land')} Standuri de antrenament (${S.stands.length}/${CONFIG.MAX_STANDS})</h3>
+  ${isUnlocked('stands') ? `<div id="stands"></div><h3>${ic('land')} Standuri de antrenament (${S.stands.length}/${CONFIG.MAX_STANDS})</h3>
   ${stands || '<div class="empty">Încă nu ai standuri. Un stand multiplică antrenamentul per DT.</div>'}
   ${S.stands.length < CONFIG.MAX_STANDS ? btn(`Construiește stand x2 <span class="cost">${fmt(t0.cost)} CR · ${t0.land} SU teren</span>`, 'buildStand', undefined, whyBuildStand(), 'block primary') : ''}
   <div class="sep"></div>
@@ -167,16 +169,32 @@ function htmlLeft() {
   <div class="kv"><span>Venit (ultima oră)</span><b class="cr">${fmt(inc)} CR</b><span>Întreținere</span><b class="${upk ? 'bad' : ''}">−${fmt(upk)} CR/h</b>
   <span>CR emise / arse (ultima oră)</span><b>${fmt(S.econ.lastHour.minted)} / ${fmt(S.econ.lastHour.burned)}</b></div>
   ${S.econ.offline ? `<div class="bad small" style="margin-top:6px">${ic('alert')} Structuri OFFLINE — datoria de ${fmt(S.econ.debt)} CR se plătește automat din următorul venit.</div>` : ''}
-  ${upk > 0 && p.cr < upk * 2 ? `<div class="warn small" style="margin-top:6px">${ic('alert')} CR puține: ți-au rămas mai puțin de 2 ore de întreținere.</div>` : ''}`;
+  ${upk > 0 && p.cr < upk * 2 ? `<div class="warn small" style="margin-top:6px">${ic('alert')} CR puține: ți-au rămas mai puțin de 2 ore de întreținere.</div>` : ''}` : lockLine('stands')}`;
 }
+// a locked section: dimmed, one line, explains when it opens
+function lockLine(id) {
+  const f = featureById(id);
+  return `<div class="lockline" data-act="noop" data-reason="${esc(lockReason(id))}" title="${esc(lockReason(id))}">🔒 <b>${esc(f.name)}</b> <span class="dim">— după ${unlockAt(id)} jocuri</span></div>`;
+}
+// tab button that respects progressive unlocking
+function tabBtn(group, id, label, icn, feature, extra) {
+  if (feature && !isUnlocked(feature)) {
+    return `<button class="tab locked" data-act="noop" data-reason="${esc(lockReason(feature))}" title="${esc(lockReason(feature))}" aria-disabled="true"><span>${ic(icn)} ${label}</span><span class="lockhint">🔒 după ${unlockAt(feature)} jocuri</span></button>`;
+  }
+  const on = (group === 'center' ? UI.centerTab : UI.rightTab) === id;
+  return `<button class="tab ${on ? 'on' : ''}" data-act="${group}Tab" data-args='"${id}"'>${ic(icn)} ${label}${extra || ''}</button>`;
+}
+const CENTER_FEATURE = { arena: null, ai: 'ai', market: 'market', land: 'land', season: 'season' };
+const RIGHT_FEATURE = { cards: null, album: 'album', guild: 'guild' };
 
 // ============================================================
 // CENTER — tabs
 // ============================================================
 function htmlCenter() {
   const tabs = [['arena', 'Arenă', 'arena'], ['ai', 'Laborator AI', 'ai'], ['market', 'Piață', 'market'], ['land', 'Teren', 'land'], ['season', 'Sezon', 'season']];
+  if (CENTER_FEATURE[UI.centerTab] && !isUnlocked(CENTER_FEATURE[UI.centerTab])) UI.centerTab = 'arena';
   const unclaimed = S.missions.list.filter(m => m.progress >= m.target && !m.claimed).length;
-  const t = tabs.map(([id, label, icn]) => `<button class="tab ${UI.centerTab === id ? 'on' : ''}" data-act="centerTab" data-args='"${id}"'>${ic(icn)} ${label}${id === 'season' && unclaimed ? ` <span class="badge-n">${unclaimed}</span>` : ''}${id === 'arena' && arenaBusy() ? ' <span class="dot blink" style="width:7px;height:7px"></span>' : ''}${id === 'ai' && S.ai.energy > 0 ? ` <span class="badge-n">${S.ai.energy}</span>` : ''}${id === 'arena' && !dailyInfo(todayStr()).claimed ? ' <span class="badge-n">!</span>' : ''}</button>`).join('');
+  const t = tabs.map(([id, label, icn]) => tabBtn('center', id, label, icn, CENTER_FEATURE[id], `${id === 'season' && unclaimed ? ` <span class="badge-n">${unclaimed}</span>` : ''}${id === 'arena' && arenaBusy() ? ' <span class="dot blink" style="width:7px;height:7px"></span>' : ''}${id === 'ai' && S.ai.energy > 0 ? ` <span class="badge-n">${S.ai.energy}</span>` : ''}${id === 'arena' && !dailyInfo(todayStr()).claimed ? ' <span class="badge-n">!</span>' : ''}`)).join('');
   let body = '';
   if (UI.centerTab === 'arena') body = htmlArena();
   else if (UI.centerTab === 'ai') body = htmlAILab();
@@ -198,28 +216,52 @@ function htmlArena() {
   const regen = p.stamina < CONFIG.SOLO.staminaMax ? `+1 în ${cd(S.time + CONFIG.SOLO.staminaRegenMs - p.staminaAcc)}` : 'plină';
   const pool = (n) => L.fee * n + L.house;
   const dly = dailyInfo(todayStr()), I = CONFIG.INCOME;
+  const multiOn = isUnlocked('multi');
   const daily = dly.claimed
     ? `<div class="small"><b class="good">Bonus zilnic revendicat</b> · ${nRo(dly.streak, 'zi', 'zile')} la rând · revino mâine pentru ziua ${dly.streak + 1}</div>`
     : `<div class="row between"><div class="small"><b class="warn">BONUS ZILNIC</b> · ziua ${dly.streak}${dly.streak > 1 ? ' la rând' : ''}<div class="tiny dim">Revino în fiecare zi: recompensele cresc timp de 7 zile, apoi ciclul se reia.</div></div>${btn(`Revendică +${fmt(dly.cr)} CR · +${dly.dt} DT${dly.shards ? ' · +' + nRo(dly.shards, 'fragment', 'fragmente') : ''}`, 'claimDaily', undefined, '', 'primary')}</div>`;
-  const rescue = S.player.cr < multiFee() ? `<div class="card hl" style="margin-top:10px"><div class="row between"><div class="small"><b class="warn">Rămâi fără credite?</b><div class="tiny dim">Credite de urgență când nu poți plăti taxa de Multiplayer (o dată la ${I.rescueCooldownMs / 3600000} h).</div></div>${btn(`Primește +${fmt(rescueAmount())} CR`, 'rescue', undefined, whyRescue(), 'accent')}</div></div>` : '';
-  const income = `<div class="card ${dly.claimed ? '' : 'hl'}">${daily}</div>
-  <div class="card" style="margin-top:10px"><div class="row between"><div class="small"><b>Antrenament liber</b> — răspunzi tu la ${I.practiceQuestions} întrebări<div class="tiny dim">Fără stamina, fără taxă: +${fmt(I.practiceCRPerCorrect * L.reward)} CR per răspuns corect · o dată la ${I.practiceCooldownMs / 60000} min</div></div>${btn('Antrenament', 'startPractice', undefined, whyPractice(), 'accent')}</div></div>
-  ${rescue}`;
-  return `${income}<div class="card league-card" style="margin-top:10px"><div class="league-emblem" style="color:${L.color};border-color:${L.color}">${L.name[0]}</div>
+  const rescue = multiOn && S.player.cr < multiFee() ? `<div class="card hl" style="margin-top:10px"><div class="row between"><div class="small"><b class="warn">Rămâi fără credite?</b><div class="tiny dim">Credite de urgență când nu poți plăti taxa de Multiplayer (o dată la ${I.rescueCooldownMs / 3600000} h).</div></div>${btn(`Primește +${fmt(rescueAmount())} CR`, 'rescue', undefined, whyRescue(), 'accent')}</div></div>` : '';
+  const practice = multiOn ? `<div class="card" style="margin-top:10px"><div class="row between"><div class="small"><b>Antrenament liber</b> — răspunzi tu la ${I.practiceQuestions} întrebări<div class="tiny dim">Fără stamina, fără taxă: +${fmt(I.practiceCRPerCorrect * L.reward)} CR per răspuns corect · o dată la ${I.practiceCooldownMs / 60000} min</div></div>${btn('Antrenament', 'startPractice', undefined, whyPractice(), 'accent')}</div></div>` : '';
+  const solo = `<div class="card"><h3>Arenă Solo</h3><div class="small dim">AI-ul tău răspunde singur, contra cronometrului. ${CONFIG.SOLO.rounds} runde, ${CONFIG.SOLO.lives} vieți. Greșit sau timp expirat = −1 viață.</div>
+      <div class="kv" style="margin:8px 0"><span>Recompensă victorie</span><b class="cr">${fmt(CONFIG.SOLO.winCR * L.reward * crMultiplier())} CR + ${CONFIG.SOLO.winDT} DT</b><span>Eșec</span><b>${CONFIG.SOLO.failCRPerCorrect} CR / răspuns corect</b><span>Perfect 10/10</span><b>${Math.round(dropChance(CONFIG.SOLO.cardDropPerfect) * 100)}% șansă de carte</b>${isUnlocked('ai') ? `<span>Laborator AI</span><b>+${CONFIG.AI_LAB.winEnergySolo} energie per victorie</b>` : ''}<span>Stamina</span><span class="stamina">${stam} <span class="tiny dim">${regen}</span></span></div>
+      ${btn('Pornește Solo', 'startSolo', undefined, whySolo(), 'block primary big')}</div>`;
+  const multi = multiOn ? `<div class="card"><h3>Arenă Multiplayer</h3><div class="small dim">${CONFIG.MULTI.minBots + 1}-${CONFIG.MULTI.maxBots + 1} jucători cu rating apropiat. Premiile se împart după scor (precizie + viteză). ${CONFIG.MULTI.overrides} Intervenții umane.</div>
+      <div class="kv" style="margin:8px 0"><span>Taxă de intrare</span><b class="cr">${fmt(L.fee)} CR</b><span>Fond de premii</span><b class="cr">${fmt(pool(CONFIG.MULTI.minBots + 1))}–${fmt(pool(CONFIG.MULTI.maxBots + 1))} CR</b><span>Șansă carte loc 1/2/3</span><b>${CONFIG.MULTI.drop.map(d => Math.round(dropChance(d) * 100) + '%').join(' / ')}</b>${isUnlocked('ai') ? `<span>Laborator AI</span><b>+${CONFIG.AI_LAB.winEnergyMulti} energie pentru top 3</b>` : ''}</div>
+      ${btn('Caută meci', 'startMulti', undefined, whyMulti(), 'block primary big')}</div>`
+    : `<div class="card locked-card" data-act="noop" data-reason="${esc(lockReason('multi'))}" title="${esc(lockReason('multi'))}"><h3>🔒 Arenă Multiplayer</h3><div class="small dim">Concurezi live cu alți jucători pentru un fond de premii.</div><div class="small" style="margin-top:8px">Se deblochează <b>după ${unlockAt('multi')} jocuri</b> <span class="dim">(ai jucat ${gamesPlayed()})</span></div></div>`;
+  return `${htmlNextStep()}${htmlPlayHero()}
+  <div class="card ${dly.claimed ? '' : 'hl'}" style="margin-top:10px">${daily}</div>
+  ${rescue}
+  <div class="cards" style="margin-top:10px">${solo}${multi}</div>
+  ${practice}
+  ${multiOn ? `<div class="card league-card" style="margin-top:10px"><div class="league-emblem" style="color:${L.color};border-color:${L.color}">${L.name[0]}</div>
     <div class="grow"><div class="row between"><b style="color:${L.color}">LIGA ${L.name.toUpperCase()}</b><span>Rating <b>${p.rating}</b></span></div>
-    ${nx ? `<div class="xp" style="margin:6px 0"><i style="width:${(prog * 100).toFixed(0)}%"></i></div><div class="tiny dim">încă ${nx.min - p.rating > 0 ? nx.min - p.rating : 0} rating până la ${nx.name} · dificultate întrebări ${L.diff[0]}-${L.diff[1]} · runde de ${L.roundMs / 1000} s</div>` : '<div class="tiny good">Ai atins liga supremă — Renașterea neurală e disponibilă în fila Sezon.</div>'}</div></div>
-  <div class="card" style="margin-top:10px"><div class="row between"><b class="warn">EVENIMENT: ${ev.name}</b><span class="tiny dim">se termină în ${cd(S.time + ev.endsIn)}</span></div><div class="small dim">${ev.desc}${ev.id === 'double_drops' ? ' — în prim-plan: ' + ev.featured.name : ''}</div></div>
-  <div class="cards" style="margin-top:10px">
-    <div class="card"><h3>Arenă Solo</h3><div class="small dim">AI-ul tău singur contra cronometrului. ${CONFIG.SOLO.rounds} runde, ${CONFIG.SOLO.lives} vieți. Greșit sau timp expirat = −1 viață.</div>
-      <div class="kv" style="margin:8px 0"><span>Recompensă victorie</span><b class="cr">${fmt(CONFIG.SOLO.winCR * L.reward * crMultiplier())} CR + ${CONFIG.SOLO.winDT} DT</b><span>Eșec</span><b>${CONFIG.SOLO.failCRPerCorrect} CR / răspuns corect</b><span>Perfect 10/10</span><b>${Math.round(dropChance(CONFIG.SOLO.cardDropPerfect) * 100)}% șansă de carte</b><span>Laborator AI</span><b>+${CONFIG.AI_LAB.winEnergySolo} energie per victorie</b><span>Stamina</span><span class="stamina">${stam} <span class="tiny dim">${regen}</span></span></div>
-      ${btn('Pornește Solo', 'startSolo', undefined, whySolo(), 'block primary big')}</div>
-    <div class="card"><h3>Arenă Multiplayer</h3><div class="small dim">${CONFIG.MULTI.minBots + 1}-${CONFIG.MULTI.maxBots + 1} jucători cu rating apropiat. Premiile se împart după scor (precizie + viteză). ${CONFIG.MULTI.overrides} Intervenții umane.</div>
-      <div class="kv" style="margin:8px 0"><span>Taxă de intrare</span><b class="cr">${fmt(L.fee)} CR</b><span>Fond de premii</span><b class="cr">${fmt(pool(CONFIG.MULTI.minBots + 1))}–${fmt(pool(CONFIG.MULTI.maxBots + 1))} CR</b><span>Șansă carte loc 1/2/3</span><b>${CONFIG.MULTI.drop.map(d => Math.round(dropChance(d) * 100) + '%').join(' / ')}</b><span>Laborator AI</span><b>+${CONFIG.AI_LAB.winEnergyMulti} energie pentru top 3</b></div>
-      ${btn('Caută meci', 'startMulti', undefined, whyMulti(), 'block primary big')}</div>
+    ${nx ? `<div class="xp" style="margin:6px 0"><i style="width:${(prog * 100).toFixed(0)}%"></i></div><div class="tiny dim">încă ${nx.min - p.rating > 0 ? nx.min - p.rating : 0} rating până la ${nx.name} · dificultate întrebări ${L.diff[0]}-${L.diff[1]} · runde de ${L.roundMs / 1000} s</div>` : '<div class="tiny good">Ai atins liga supremă — Renașterea neurală e disponibilă în fila Sezon.</div>'}</div></div>` : ''}
+  ${isUnlocked('season') ? `<div class="card" style="margin-top:10px"><div class="row between"><b class="warn">EVENIMENT: ${ev.name}</b><span class="tiny dim">se termină în ${cd(S.time + ev.endsIn)}</span></div><div class="small dim">${ev.desc}${ev.id === 'double_drops' ? ' — în prim-plan: ' + ev.featured.name : ''}</div></div>` : ''}
+  ${UI.lastResult ? `<div class="card" style="margin-top:10px"><h4>Ultimul joc</h4><div class="small">${UI.lastResult}</div></div>` : ''}
+  ${multiOn ? `<div class="card" style="margin-top:10px"><h4>Pradă aleatorie</h4><div class="small dim">Fiecare răspuns corect al AI-ului în Arenă are ${Math.round(CONFIG.LOOT.perCorrect * 100)}% șanse să găsească un <b class="warn">Cache de date</b> (DT, CR sau fragmente). După fiecare meci: ${Math.round(CONFIG.LOOT.crateSolo * 100)}% (Solo) / ${Math.round(CONFIG.LOOT.crateMulti * 100)}% (Multiplayer) șanse pentru o <b class="warn">Ladă de pradă</b>, +${Math.round(CONFIG.LOOT.crateWinBonus * 100)}% dacă câștigi sau termini în top 3 — poate conține DT, CR, fragmente, stamina sau o carte.</div></div>
+  <div class="tiny mute" style="margin-top:10px">Sfat: în Multiplayer, apasă INTERVENȚIE UMANĂ înainte să răspundă AI-ul ca să răspunzi tu — rapid și corect înseamnă punctaj maxim, greșit înseamnă zero.</div>` : ''}`;
+}
+// ---------- „Următorul pas” + butoanele mari de joc ----------
+function htmlNextStep() {
+  const n = nextStep();
+  return `<div class="nextstep"><span class="ns-label">URMĂTORUL PAS</span><span class="ns-text">${esc(n.text)}</span>${btn(n.label, n.act === 'equip' ? 'nsEquip' : n.act, n.args, n.why || '', 'primary sm ns-btn')}</div>`;
+}
+function htmlPlayHero() {
+  const why = whyQuick(), d = quickDay(), sq = S.quick;
+  const a = why ? ` data-reason="${esc(why)}" title="${esc(why)}" aria-disabled="true"` : '';
+  return `<div class="hero">
+    <button type="button" class="btn hero-play ${why ? 'is-disabled' : ''}" data-act="startQuick"${a}><span>▶ Joacă acum — Quiz Rapid</span><small>${CONFIG.QUICK.questions} întrebări · tu răspunzi · combo până la ×${CONFIG.QUICK.combo[CONFIG.QUICK.combo.length - 1]}</small></button>
+    <button type="button" class="btn hero-surv ${why ? 'is-disabled' : ''}" data-act="startSurvival"${a}><span>♥ Supraviețuire</span><small>${sq.survBest ? 'Record: ' + sq.survBest : '3 vieți · tot mai greu'}</small></button>
   </div>
-  ${UI.lastResult ? `<div class="card" style="margin-top:10px"><h4>Ultimul meci</h4><div class="small">${UI.lastResult}</div></div>` : ''}
-  <div class="card" style="margin-top:10px"><h4>Pradă aleatorie</h4><div class="small dim">Fiecare răspuns corect are ${Math.round(CONFIG.LOOT.perCorrect * 100)}% șanse să găsească un <b class="warn">Cache de date</b> (DT, CR sau fragmente). După fiecare meci: ${Math.round(CONFIG.LOOT.crateSolo * 100)}% (Solo) / ${Math.round(CONFIG.LOOT.crateMulti * 100)}% (Multiplayer) șanse pentru o <b class="warn">Ladă de pradă</b>, +${Math.round(CONFIG.LOOT.crateWinBonus * 100)}% dacă câștigi sau termini în top 3 — poate conține DT, CR, fragmente, stamina sau o carte.</div></div>
-  <div class="tiny mute" style="margin-top:10px">Sfat: în meci, apasă INTERVENȚIE UMANĂ înainte să răspundă AI-ul ca să răspunzi tu — rapid și corect înseamnă punctaj maxim, greșit înseamnă zero.</div>`;
+  <div class="hero-sub tiny"><span class="${d.full ? 'dim' : 'warn'}">Jocuri cu recompensă întreagă azi: <b>${d.used}/${d.limit}</b>${d.full ? '' : ' — acum primești 25%'}</span>${sq.best ? `<span class="dim">Record Quiz Rapid: <b class="good">${fmt(sq.best)}</b></span>` : ''}</div>`;
+}
+function htmlUnlocked(list) {
+  return list.map(f => `<div class="unlock-line"><span>🔓</span><div class="grow small"><b class="good">Nou deblocat: ${esc(f.name)}</b><div class="tiny dim">${esc(f.desc)}</div></div>${btn('Deschide', 'gotoFeature', f.id, '', 'sm accent')}</div>`).join('');
+}
+function seenFeatureTab(tab) {
+  const f = S.unlock.fresh && featureById(S.unlock.fresh);
+  if (f && f.tab === tab) S.unlock.fresh = null;
 }
 function htmlMatch(m) {
   const me = m.parts[0], now = performance.now();
@@ -272,6 +314,7 @@ function htmlResult(m) {
   if (r.loot && r.loot.length) lines.push(`<b class="warn">PRADĂ:</b> ${r.loot.map(l => `<span class="good">${esc(l.text)}</span> <span class="tiny dim">(${esc(l.source)})</span>`).join(' · ')}`);
   if (r.tax) lines.push(`<span class="gvc">Seiful breslei +${fmt(r.tax)} GV</span> <span class="dim">(bonus, nu se scade din câștigul tău)</span>`);
   if (r.energy) lines.push(`<span class="dtc">+${r.energy} energie Laborator AI</span> <span class="dim">— învață-ți AI-ul în fila Laborator AI</span>`);
+  if (r.unlocked && r.unlocked.length) lines.push(htmlUnlocked(r.unlocked));
   const standings = m.type === 'multi' ? m.parts.slice().sort((a, b) => b.score - a.score).map((p, i) => `<div class="part ${p.isPlayer ? 'me' : ''}"><span class="dim">${i + 1}</span><span>${esc(p.name)}</span><span class="st">${p.correct}/${m.rounds}</span><b>${fmt(p.score)}</b></div>`).join('') : '';
   return `<div class="card center" style="padding:20px"><div class="result-big">${big}</div>${lines.map(l => `<div style="margin-top:6px">${l}</div>`).join('')}
     ${r.card ? `<div style="margin:14px auto 0;max-width:180px">${nftCard(r.card)}</div><div class="good small">CARTE OBȚINUTĂ!</div>` : ''}
@@ -423,7 +466,8 @@ function htmlSeason() {
 // ============================================================
 function htmlRight() {
   const tabs = [['cards', 'Cărți', 'nft'], ['album', 'Album', 'season'], ['guild', 'Breaslă', 'guild']];
-  const t = tabs.map(([id, l, i]) => `<button class="tab ${UI.rightTab === id ? 'on' : ''}" data-act="rightTab" data-args='"${id}"'>${ic(i)} ${l}${id === 'cards' ? ` <span class="dim tiny">${S.inv.length}</span>` : ''}</button>`).join('');
+  if (RIGHT_FEATURE[UI.rightTab] && !isUnlocked(RIGHT_FEATURE[UI.rightTab])) UI.rightTab = 'cards';
+  const t = tabs.map(([id, l, i]) => tabBtn('right', id, l, i, RIGHT_FEATURE[id], id === 'cards' ? ` <span class="dim tiny">${S.inv.length}</span>` : '')).join('');
   return `<div class="tabs">${t}</div>${UI.rightTab === 'guild' ? htmlGuild() : UI.rightTab === 'album' ? htmlAlbum() : htmlCards()}`;
 }
 
@@ -716,8 +760,8 @@ const HANDLERS = {
   closeModal() { closeModal(); },
   confirmYes() { const cb = UI.confirmCb; UI.confirmCb = null; closeModal(); if (cb) cb(); renderAll(); },
   view(v) { UI.view = v; window.scrollTo(0, 0); if (v === 'log') setTimeout(() => renderLog(true), 0); },
-  centerTab(t) { UI.centerTab = t; },
-  rightTab(t) { UI.rightTab = t; },
+  centerTab(t) { if (CENTER_FEATURE[t] && !isUnlocked(CENTER_FEATURE[t])) return; UI.centerTab = t; seenFeatureTab(t); },
+  rightTab(t) { if (RIGHT_FEATURE[t] && !isUnlocked(RIGHT_FEATURE[t])) return; UI.rightTab = t; seenFeatureTab(t); },
   marketTab(t) { UI.marketTab = t; },
   chartType(t) { UI.chartType = t; },
   lbKind(k) { UI.lbKind = k; },
@@ -887,6 +931,7 @@ const HANDLERS = {
     if (k === 'season') { S.season.start = S.time - CONFIG.SEASON.lengthMs; }
     if (k === 'hour') simulate(CONFIG.HOUR);
     if (k === 'stamina') p.stamina = CONFIG.SOLO.staminaMax;
+    if (k === 'unlock') { unlockAll(); toast('Toate secțiunile au fost deblocate'); }
     saveGame(); openDebug();
   },
   dbgTests() {
@@ -922,6 +967,173 @@ Object.assign(HANDLERS, {
   rescue() { doAct(() => actRescue()); },
   startPractice() { const r = doAct(() => actStartPractice(), true); if (r && r.ok) openPractice(); },
   practiceAnswer(o) { practiceAnswer(o); openPractice(); if (PRACTICE && PRACTICE.done) saveGame(); },
+});
+
+// ============================================================
+// QUIZ RAPID & SUPRAVIEȚUIRE (jucătorul răspunde) — fereastră proprie
+// ============================================================
+const OPT_KEYS = ['A', 'B', 'C', 'D'];
+function htmlQuickGame(m) {
+  const Q = CONFIG.QUICK, surv = m.mode === 'survival';
+  const title = surv ? '♥ Supraviețuire' : '▶ Quiz Rapid';
+  const head = `<div class="modal-head"><h2>${title}</h2><button class="iconbtn" data-act="quickQuit" aria-label="${m.done ? 'Închide' : 'Renunță'}" title="${m.done ? 'Închide' : 'Renunță (păstrezi recompensele de până acum)'}">✕</button></div>`;
+  if (m.done) return head + htmlQuickEnd(m);
+  const q = m.q, reveal = m.phase === 'reveal', last = m.last;
+  const mult = quickComboMult(m.streak);
+  const left = surv
+    ? `<div><span class="hearts">${'♥'.repeat(Math.max(0, m.lives))}<span class="mute">${'♥'.repeat(Math.max(0, Q.survival.lives - m.lives))}</span></span><div class="tiny dim">Nivel ${q.level}/10 · corecte ${m.correct}${S.quick.survBest ? ' · record ' + S.quick.survBest : ''}</div></div>`
+    : `<div><div class="tiny dim qlabel">ÎNTREBAREA</div><b class="qnum">${Math.min(m.i + (reveal ? 0 : 1), m.n)}</b><span class="dim">/${m.n}</span><div class="qdots">${Array.from({ length: m.n }, (_, i) => `<i class="${i < m.answered ? (m.hist[i] ? 'ok' : 'bad') : i === m.answered ? 'cur' : ''}"></i>`).join('')}</div></div>`;
+  const combo = `<div class="qcombo ${mult > 1 ? 'on' : ''} ${reveal && last && last.comboUp ? 'bump' : ''}">×${String(mult).replace('.', ',')}<small>COMBO</small></div>`;
+  const right = `<div class="qscore"><b>${fmt(m.score)}</b> <span class="tiny dim">puncte</span><div class="cr small">+${fmt(m.cr)} CR</div></div>`;
+  const opts = q.options.map((o, i) => {
+    let cls = 'opt qopt';
+    const removed = m.removed.includes(o);
+    if (removed) cls += ' removed';
+    if (reveal) {
+      if (o === q.answer) cls += ' right';
+      else if (last && last.choice === o) cls += ' wrongpick';
+      else cls += ' faded';
+    } else if (!removed) cls += ' live';
+    if (m.aiHint && m.aiHint.option === o) cls += ' aipick';
+    const mark = m.aiHint && m.aiHint.option === o ? `<span class="aimark">🤖 ${m.aiHint.conf}%</span>` : '';
+    const dis = reveal || removed ? ' disabled' : '';
+    return `<button type="button" class="${cls}" data-act="quickAnswer" data-args="${i}"${dis}><b class="okey">${OPT_KEYS[i]}</b> ${esc(o)}${mark}</button>`;
+  }).join('');
+  let fb = '';
+  if (reveal && last) {
+    if (last.right) fb = `<span class="good">✓ Corect! +${fmt(last.cr)} CR · +${last.pts} puncte${last.comboUp ? ` · <b class="warn">COMBO ×${String(quickComboMult(m.streak)).replace('.', ',')}!</b>` : ''}</span>`;
+    else fb = `<span class="bad">${last.timeout ? '⏱ Timp expirat' : '✗ Greșit'} — răspunsul corect: <b>${esc(last.answer)}</b>${surv ? ' · −1 viață' : ''}</span>`;
+  } else if (m.aiHint) {
+    fb = `<span style="color:var(--b)">🤖 AI-ul tău crede că e <b>„${esc(m.aiHint.option)}”</b> · încredere ${m.aiHint.conf}%</span>`;
+  }
+  const qa = !reveal && !m.aiHint && m.aiLeft > 0 ? '' : (m.aiLeft <= 0 && !m.aiHint ? 'Ai folosit „Întreabă AI-ul” în acest joc' : 'Indisponibil acum');
+  const qf = !reveal && !m.removed.length && m.fiftyLeft > 0 ? '' : (m.fiftyLeft <= 0 && !m.removed.length ? 'Ai folosit 50/50 în acest joc' : 'Indisponibil acum');
+  const core = equippedOfType('core');
+  const tip = core ? `<span class="good">Nucleu echipat: +${Q.coreBonusAI} „Întreabă AI-ul” pe joc</span>` : `Sfat: o carte <b>Nucleu</b> echipată îți dă încă un „Întreabă AI-ul”. Antrenează AI-ul ca să fie mai sigur pe el.`;
+  return head + `<div class="qhead">${left}${combo}${right}</div>
+    <div class="qtimer-row"><div class="timer"><i id="qbar"></i></div><span id="qsec">${Math.ceil(Q.timeMs / 1000)}</span></div>
+    <div class="tiny dim">${q.kind === 'math' ? 'MATEMATICĂ' : 'CULTURĂ GENERALĂ · ' + esc(q.cat).toUpperCase()} · dificultate ${q.diff}/10</div>
+    <div class="qtext">${esc(q.text)}</div>
+    <div class="opts">${opts}</div>
+    <div class="qfb">${fb}</div>
+    <div class="qhelpers">${btn(`🤖 Întreabă AI-ul <span class="cost">(${m.aiLeft})</span>`, 'quickAI', undefined, qa, 'accent')}${btn(`✂ 50/50 <span class="cost">(${m.fiftyLeft})</span>`, 'quickFifty', undefined, qf, '')}</div>
+    <div class="tiny dim qtip">${tip}</div>
+    ${m.full ? '' : `<div class="tiny warn" style="margin-top:4px">Ai jucat deja ${CONFIG.QUICK.dailyFull} jocuri azi: acum primești ${Math.round(Q.reducedMult * 100)}% din recompense.</div>`}`;
+}
+function htmlQuickEnd(m) {
+  const r = m.result || {}, surv = m.mode === 'survival', d = quickDay();
+  const big = surv ? `${r.correct} <span class="small dim">corecte</span>` : `${fmt(r.score)} <span class="small dim">puncte</span>`;
+  const rewards = [`<span class="cr">+${fmt(r.cr)} CR</span>`, `<span class="dtc">+${r.dt} DT</span>`];
+  if (r.energy) rewards.push(`<span class="dtc">+${r.energy} energie Laborator AI</span>`);
+  if (r.tax) rewards.push(`<span class="gvc">seiful breslei +${fmt(r.tax)} GV</span>`);
+  return `<div class="quick-end center">
+    ${r.record ? '<div class="record">RECORD NOU!</div>' : r.firstBest ? '<div class="tiny dim" style="letter-spacing:.1em">PRIMUL TĂU RECORD</div>' : ''}
+    ${r.perfect ? '<div class="good" style="font-weight:800;letter-spacing:.08em">PERFECT 10/10!</div>' : ''}
+    <div class="result-big">${big}</div>
+    ${r.abandoned ? '<div class="tiny warn">Joc întrerupt — ai păstrat recompensele de până acum.</div>' : ''}
+    <div class="kv end-kv"><span>Răspunsuri corecte</span><b>${r.correct}/${surv ? r.answered : r.total}</b>
+      ${surv ? `<span>Scor</span><b>${fmt(r.score)}</b>` : ''}
+      <span>Cel mai bun combo</span><b class="warn">×${String(r.bestMult || 1).replace('.', ',')} <span class="dim">(${nRo(r.bestStreak || 0, 'corect', 'corecte')} la rând)</span></b>
+      <span>${surv ? 'Record Supraviețuire' : 'Record Quiz Rapid'}</span><b>${surv ? S.quick.survBest : fmt(S.quick.best)}</b></div>
+    <div class="end-rewards">${rewards.join(' · ')}</div>
+    ${r.card ? `<div style="margin:12px auto 0;max-width:160px">${nftCard(r.card)}</div><div class="good small">CARTE OBȚINUTĂ!</div>` : ''}
+    <div class="tiny ${d.full ? 'dim' : 'warn'}" style="margin-top:6px">Jocuri cu recompensă întreagă azi: ${d.used}/${d.limit}${r.full ? '' : ' · acest joc: 25% din recompense'}</div>
+    ${r.unlocked && r.unlocked.length ? `<div class="col" style="margin-top:12px;text-align:left">${htmlUnlocked(r.unlocked)}</div>` : ''}
+    <div class="row end-btns">${btn('↻ Joacă din nou', 'quickAgain', undefined, '', 'primary big')}${btn('Închide', 'quickClose', undefined, '', 'big')}</div>
+  </div>`;
+}
+function openQuick() {
+  openModal('', true);
+  UI.modalKind = { type: 'quick' };
+  UI.lastQuickHtml = null;
+  const box = $('#modal .modal-box');
+  if (box) box.classList.add('quick-box');
+  renderQuick();
+}
+function quickModalOpen() { return !!(UI.modalOpen && UI.modalKind && UI.modalKind.type === 'quick'); }
+function renderQuick() {
+  if (!QUICK || !quickModalOpen()) return;
+  const html = htmlQuickGame(QUICK);
+  if (html !== UI.lastQuickHtml) {
+    UI.lastQuickHtml = html;
+    const box = $('#modal .modal-box');
+    if (box) box.innerHTML = html;
+  }
+  updateQuickTimer();
+}
+function updateQuickTimer() {
+  const m = QUICK, bar = document.getElementById('qbar'), sec = document.getElementById('qsec');
+  if (!m || !bar) return;
+  const T = CONFIG.QUICK.timeMs;
+  const left = m.phase === 'question' ? clamp(1 - (performance.now() - m.qStart) / T, 0, 1) : 0;
+  bar.style.transform = `scaleX(${left.toFixed(3)})`;
+  bar.style.background = left < 0.25 ? 'var(--bad)' : left < 0.5 ? 'var(--warn)' : 'var(--b)';
+  if (sec) { const s = String(Math.ceil(left * T / 1000)); if (sec.textContent !== s) sec.textContent = s; sec.className = left < 0.25 ? 'bad' : ''; }
+}
+// apelat la fiecare cadru din main.js
+function quickTick(now) {
+  const m = QUICK;
+  if (!m || m.done) return;
+  const wasPhase = m.phase;
+  if (quickUpdate(now)) {
+    if (wasPhase === 'question' && m.last) setPetState('wrong', 900); // timp expirat
+    if (m.done) afterQuickDone();
+    else renderQuick();
+  }
+  updateQuickTimer();
+}
+function afterQuickDone() {
+  const m = QUICK, r = m && m.result;
+  if (!r) return;
+  if (r.answered) {
+    UI.lastResult = `${m.mode === 'quick' ? 'Quiz Rapid' : 'Supraviețuire'} — ${r.correct} corecte, ${fmt(r.score)} puncte, <span class="cr">+${fmt(r.cr)} CR</span> · <span class="dtc">+${r.dt} DT</span>${r.record ? ' · <b class="warn">record nou!</b>' : ''}`;
+    setPetState(r.record || r.perfect ? 'correct' : 'idle', 1500);
+  }
+  if (!quickModalOpen()) { // fereastra a fost închisă între timp
+    if (r.unlocked && r.unlocked.length) toast('Nou deblocat: ' + r.unlocked.map(f => f.name).join(', '), 'warn');
+  }
+  renderQuick();
+  renderAll();
+}
+function startQuickUI(mode) {
+  const r = doAct(() => startQuickGame(mode, performance.now()), true);
+  if (r && r.ok) openQuick();
+}
+Object.assign(HANDLERS, {
+  startQuick() { QUICK = QUICK && QUICK.done ? null : QUICK; startQuickUI('quick'); },
+  startSurvival() { QUICK = QUICK && QUICK.done ? null : QUICK; startQuickUI('survival'); },
+  quickAnswer(i) {
+    const m = QUICK;
+    if (!m || m.done || m.phase !== 'question') return;
+    const o = m.q.options[i];
+    if (o === undefined || m.removed.includes(o)) return;
+    const r = quickAnswer(m, o, performance.now());
+    if (r.ok) setPetState(m.last.right ? 'correct' : 'wrong', 900);
+    renderQuick();
+  },
+  quickAI() { const r = quickAskAI(QUICK); if (!r.ok) toast(r.msg, 'err'); else setPetState('thinking', 1200); renderQuick(); },
+  quickFifty() { const r = quickFifty(QUICK); if (!r.ok) toast(r.msg, 'err'); renderQuick(); },
+  quickQuit() {
+    if (QUICK && !QUICK.done) { finishQuick(QUICK, true); afterQuickDone(); if (!QUICK.result.answered) { QUICK = null; closeModal(); } }
+    else { closeModal(); }
+  },
+  quickClose() { closeModal(); },
+  quickAgain() { const mode = QUICK ? QUICK.mode : 'quick'; QUICK = null; closeModal(); startQuickUI(mode); },
+  nsEquip(id) { doAct(() => actEquip(id)); },
+  gotoFeature(id) {
+    const f = featureById(id); if (!f || !isUnlocked(id)) return;
+    if (quickModalOpen() || UI.modalOpen) closeModal();
+    if (f.panel === 'center') { UI.centerTab = f.tab; UI.view = 'center'; }
+    else if (f.panel === 'right') { UI.rightTab = f.tab; UI.view = 'right'; }
+    else UI.view = 'left';
+    if (S.unlock.fresh === id) S.unlock.fresh = null;
+    renderAll();
+    setTimeout(() => {
+      const el = f.panel === 'left' ? document.getElementById('stands') : null;
+      if (el) window.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top + window.scrollY - 90), behavior: 'smooth' });
+      else window.scrollTo(0, 0);
+    }, 30);
+  },
 });
 
 // ============================================================
@@ -1065,24 +1277,21 @@ function openDebug() {
   const infl = e.lastHour.burned ? (e.lastHour.minted / e.lastHour.burned).toFixed(2) : '∞';
   openModal(modalHead('Panou de depanare') + `<div class="col">
     <div class="row"><span class="small">Viteza timpului:</span>${[1, 10, 100].map(x => `<button class="chip ${UI.speed === x ? 'on' : ''}" data-act="dbgSpeed" data-args="${x}">x${x}</button>`).join('')}${btn('+1 oră', 'dbgAdd', 'hour', '', 'sm')}</div>
-    <div class="row">${[['cr', '+100K CR'], ['dt', '+100 DT'], ['land', '+1000 SU'], ['shards', '+500 fragmente'], ['nft', '+Echipament Rar (4 tipuri)'], ['nftrand', '+10 cărți'], ['unique', '+1 Unică'], ['recal', '+5 Recalibratoare'], ['energy', 'Energie AI maximă'], ['live', 'Reîmprospătează quiz live'], ['rating', '+100 rating'], ['stamina', 'Stamina plină'], ['crit', 'Forțează starea critică'], ['season', 'Încheie sezonul']].map(([k, l]) => btn(l, 'dbgAdd', k, '', 'sm')).join('')}</div>
+    <div class="row">${[['cr', '+100K CR'], ['dt', '+100 DT'], ['land', '+1000 SU'], ['shards', '+500 fragmente'], ['nft', '+Echipament Rar (4 tipuri)'], ['nftrand', '+10 cărți'], ['unique', '+1 Unică'], ['recal', '+5 Recalibratoare'], ['energy', 'Energie AI maximă'], ['live', 'Reîmprospătează quiz live'], ['rating', '+100 rating'], ['stamina', 'Stamina plină'], ['crit', 'Forțează starea critică'], ['season', 'Încheie sezonul'], ['unlock', 'Deblochează tot']].map(([k, l]) => btn(l, 'dbgAdd', k, '', 'sm')).join('')}</div>
     <div class="card"><h4>Economie</h4><div class="kv"><span>CR emise total</span><b>${fmt(e.minted)}</b><span>CR arse total</span><b>${fmt(e.burned)}</b><span>Ultima oră emise / arse</span><b>${fmt(e.lastHour.minted)} / ${fmt(e.lastHour.burned)}</b><span>Indicator inflație (emise/arse)</span><b class="${infl > 2 ? 'warn' : 'good'}">${infl}</b><span>Cache grafică</span><b>${Art.cacheSize()}</b><span>Anunțuri pe piață</span><b>${S.market.listings.length}</b></div></div>
     <div class="card"><div class="row between"><h4 style="margin:0">Autoteste</h4>${btn('Rulează testele', 'dbgTests', undefined, '', 'sm primary')}</div><div id="dbgtests" style="margin-top:6px"></div></div></div>`, true);
 }
 
 // ---------- tutorial ----------
 const TUTORIAL = [
-  ['Bun venit în CyberNet', `Conduci un mic <b>pet AI</b> într-o rețea cyberpunk simulată, plină de alți jucători. Cheltuie <b class="dtc">Tokeni de date</b> (DT) ca să-i antrenezi <b>IQ-ul matematic</b>, <b>Baza de cunoștințe</b> și <b>Viteza de procesare</b>. DT se reîncarcă cu +1 la fiecare 30 s (stoc maxim 50 — intră des în joc!).`],
-  ['Standuri și teren', `Construiește <b>Standuri de antrenament</b> (x2 → x10) pe <b class="landc">terenul</b> tău ca să multiplici antrenamentul. Standurile costă CR și întreținere pe oră; nivelurile mai mari cer ligi mai mari. Terenul vine de pe <b>Serverul global</b> — prețul lui crește pe măsură ce spațiul se umple.`],
-  ['Arena', `<b>Solo</b>: AI-ul tău contra cronometrului, 3 vieți, 10 runde. <b>Multiplayer</b>: plătești o taxă de intrare, concurezi live, iar fondul de premii se împarte după scor. Apasă <b style="color:var(--c)">INTERVENȚIE UMANĂ</b> (de 2 ori pe meci) ca să răspunzi tu la o întrebare — rapid și corect = punctaj maxim. Câștigă rating ca să urci în ligi.`],
-  ['Cărți', `Clasările de top aduc <b>cărți</b> de 4 tipuri: <b>Nucleu</b>, <b>Memorie virtuală</b>, <b>Hardware</b> și <b>Răcitor</b>, fiecare generată din propriul ADN. Echipează câte una din fiecare pentru un bonus de set — dar Nucleul și Hardware-ul încălzesc echipamentul, deci ai nevoie de un Răcitor bun. <b>Îmbunătățește</b> o carte de la +0 la +4 cu CR și fragmente, apoi <b>evolueaz-o</b>: Comună → Neobișnuită → Rară → Epică → Legendară.`],
-  ['Laboratorul AI', `În <b>Laboratorul AI</b>, AI-ul tău îți pune întrebări în limba română și învață din răspunsurile tale. Fiecare lecție îți dă un <b>Recalibrator neural</b> (regenerează statisticile bonus ale unei cărți), CR, fragmente, o șansă de carte și o mică șansă la o carte <b style="color:#ffe14d">UNICĂ</b>. Energia se reîncarcă cu +1 pe oră; victoriile din quiz dau în plus.`],
-  ['Bresle, piață și server', `Intră într-o <b>breaslă</b>: primește un bonus de 10% din câștigurile membrilor ca să construiască un sediu și să deblocheze stiluri. Tranzacționează cărți pe <b>piață</b> sau deschide-ți propriul stand pentru comisioane. Când Serverul global scade sub 50% spațiu liber, construcțiile grele se blochează și rețeaua se extinde. Baftă, operatorule.`],
+  ['Răspunzi la întrebări, câștigi CR și DT', `Apasă <b class="good">▶ Joacă acum — Quiz Rapid</b>: 10 întrebări, iar <b>tu</b> alegi răspunsul. Răspunsurile corecte la rând cresc <b class="warn">combo</b>-ul (până la ×3) și îți aduc <b class="cr">Credite (CR)</b> și <b class="dtc">Tokeni de date (DT)</b>.`],
+  ['Antrenează-ți AI-ul cu DT', `Cheltuie DT în panoul <b>Baza de antrenament AI</b> ca să-i crești AI-ului tău IQ-ul matematic și cultura generală. Un AI mai bun îți dă sugestii mai sigure când apeși <b>🤖 Întreabă AI-ul</b> și joacă singur în <b>Arena Solo</b>.`],
+  ['Restul se deblochează pe măsură ce joci', `Multiplayer, Piața, Laboratorul AI, terenul, sezonul și breslele apar treptat, după câteva jocuri. Nu trebuie să înveți totul acum — cardul <b style="color:var(--b)">Următorul pas</b> îți spune mereu ce merită făcut.`],
 ];
 function showTutorial(step) {
   if (step >= TUTORIAL.length) { S.tutorialStep = TUTORIAL.length; saveGame(); closeModal(); return; }
   const [t, b] = TUTORIAL[step];
-  openModal(modalHead(`${step + 1}/${TUTORIAL.length} · ${t}`) + `<div style="line-height:1.6">${b}</div><div class="row" style="justify-content:flex-end;margin-top:14px">${btn('Sari peste', 'tutorial', TUTORIAL.length)}${btn(step === TUTORIAL.length - 1 ? 'Începe jocul' : 'Înainte', 'tutorial', step + 1, '', 'primary')}</div>`);
+  openModal(modalHead(`${step + 1}/${TUTORIAL.length} · ${t}`) + `<div style="line-height:1.6">${b}</div><div class="row" style="justify-content:flex-end;margin-top:14px">${btn('Sari peste', 'tutorial', TUTORIAL.length)}${btn(step === TUTORIAL.length - 1 ? 'Începe să joci' : 'Înainte', 'tutorial', step + 1, '', 'primary')}</div>`);
 }
 
 function showAwaySummary(before, ms) {
@@ -1105,7 +1314,7 @@ function showAwaySummary(before, ms) {
 function bindEvents() {
   document.addEventListener('click', e => {
     const el = e.target.closest('[data-act]');
-    if (!el) { if (e.target.id === 'modal') closeModal(); return; }
+    if (!el) { if (e.target.id === 'modal' && !quickModalOpen()) closeModal(); return; }
     if (el.dataset.reason) { toast(el.dataset.reason, 'warn'); return; }
     const act = el.dataset.act;
     const h = HANDLERS[act];
@@ -1131,7 +1340,11 @@ function bindEvents() {
     }
   });
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && UI.modalOpen) closeModal();
+    if (e.key === 'Escape' && UI.modalOpen) { if (quickModalOpen()) { if (QUICK && QUICK.done) closeModal(); } else closeModal(); }
+    if (quickModalOpen() && QUICK && !QUICK.done && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const k = e.key.toUpperCase(), i = ['1', '2', '3', '4'].indexOf(k) >= 0 ? Number(k) - 1 : OPT_KEYS.indexOf(k);
+      if (i >= 0) { e.preventDefault(); HANDLERS.quickAnswer(i); return; }
+    }
     if (e.key === '`' && !/INPUT|TEXTAREA/.test((document.activeElement || {}).tagName)) openDebug();
     if (e.key === 'Enter' && document.activeElement && document.activeElement.dataset.in === 'donate') HANDLERS.donate();
     if (e.key === 'Enter' && !e.shiftKey && document.activeElement && document.activeElement.dataset.in === 'aiAnswer') { e.preventDefault(); HANDLERS.aiSend(); }

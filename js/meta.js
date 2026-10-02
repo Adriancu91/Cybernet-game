@@ -22,6 +22,7 @@ const MISSION_TYPES = [
   { type: 'donate',     text: n => `Donează ${fmt(n)} CR breslei tale`, target: () => 200 },
   { type: 'salvage',    text: n => `Reciclează ${metaRoCount(n, 'carte', 'cărți')} în fragmente`, target: () => 2 },
   { type: 'upgrade',    text: n => `Îmbunătățește cărți de ${metaRoCount(n, 'dată', 'ori')}`, target: () => 2 },
+  { type: 'quick_play', text: n => `Joacă ${metaRoCount(n, 'Quiz Rapid sau Supraviețuire', 'jocuri de Quiz Rapid sau Supraviețuire')}`, target: () => 3 },
   { type: 'ai_round',   text: n => `Învață-ți AI-ul în Laboratorul AI de ${metaRoCount(n, 'dată', 'ori')}`, target: () => 1 },
 ];
 function ensureMissions() {
@@ -62,6 +63,10 @@ const ACHIEVEMENTS = [
   ['multi_1', 'Șobolan de lobby', 'Joacă un meci Multiplayer', () => counter('multiPlayed') >= 1],
   ['multi_win', 'Campion', 'Termină pe locul 1 la Multiplayer', () => counter('multiWins') >= 1],
   ['multi_win10', 'Dinastie', 'Termină pe locul 1 la Multiplayer de 10 ori', () => counter('multiWins') >= 10],
+  ['quick_1', 'Primul quiz', 'Joacă un Quiz Rapid', () => (S.quick.played || 0) >= 1],
+  ['quick_perfect', 'Minte brici', 'Răspunde corect la 10/10 întrebări într-un Quiz Rapid', () => counter('quickPerfect') >= 1],
+  ['quick_100', 'Enciclopedie ambulantă', 'Răspunde corect la 100 de întrebări în Quiz Rapid și Supraviețuire', () => counter('quickCorrect') >= 100],
+  ['surv_20', 'Greu de doborât', 'Răspunde corect la 20 de întrebări într-o rundă de Supraviețuire', () => (S.quick.survBest || 0) >= 20],
   ['override_1', 'Totuși uman', 'Răspunde corect la o Intervenție umană', () => counter('overrideOk') >= 1],
   ['override_10', 'Cyborg', 'Răspunde corect la 10 Intervenții umane', () => counter('overrideOk') >= 10],
   ['silver', 'Circuit de Argint', 'Ajungi în liga Argint', () => S.player.peakLeague >= 1],

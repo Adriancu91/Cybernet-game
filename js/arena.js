@@ -36,12 +36,14 @@ function arenaBusy() { return !!(ARENA && ARENA.phase !== 'done'); }
 // ---------- reasons ----------
 function whySolo() {
   if (arenaBusy()) return 'Un meci este deja în desfășurare';
+  if (typeof QUICK !== 'undefined' && QUICK && !QUICK.done) return 'Termină mai întâi jocul de quiz';
   if (S.player.stamina < 1) return 'Fără stamina - următoarea în ' + fmtTime(CONFIG.SOLO.staminaRegenMs - S.player.staminaAcc);
   return '';
 }
 function multiFee() { return CONFIG.LEAGUES[S.player.league].fee; }
 function whyMulti() {
   if (arenaBusy()) return 'Un meci este deja în desfășurare';
+  if (typeof QUICK !== 'undefined' && QUICK && !QUICK.done) return 'Termină mai întâi jocul de quiz';
   if (!canPayCR(multiFee())) return `Taxă de intrare ${fmt(multiFee())} CR - îți mai trebuie ${fmt(multiFee() - S.player.cr)} CR`;
   return '';
 }
@@ -88,6 +90,7 @@ function startSolo(now) {
   const r = whySolo(); if (r) return { ok: false, msg: r };
   S.player.stamina--;
   if (S.player.stamina === CONFIG.SOLO.staminaMax - 1) S.player.staminaAcc = 0;
+  count('soloPlayed');
   ARENA = createMatch('solo', now);
   log('ARENA', `Arenă Solo începută (liga ${CONFIG.LEAGUES[ARENA.league].name}). Vieți: ${CONFIG.SOLO.lives}, runde: ${ARENA.rounds}.`);
   return { ok: true };
@@ -283,6 +286,7 @@ function finishMatch(m) {
   const good = m.type === 'solo' ? res.win : res.place <= 3;
   const crate = rollCrate(m, good);
   res.loot = (m.loot || []).concat(crate ? [crate] : []);
+  res.unlocked = typeof checkUnlocks === 'function' ? checkUnlocks() : [];
   m.result = res;
   if (typeof saveGame === 'function' && typeof window !== 'undefined') saveGame();
   return res;

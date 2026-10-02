@@ -39,7 +39,7 @@
       const away = Date.now() - (S.realTs || Date.now());
       catchUp(away, true);
     }
-    UI.view = window.innerWidth < 768 ? 'left' : UI.view;
+    UI.view = window.innerWidth < 768 ? 'center' : UI.view; // pe telefon pornești direct în „Joacă”
     renderAll();
     if (isNew && CLOUD.enabled() && !CLOUD.loggedIn()) showWelcome();
     else if (S.tutorialStep < TUTORIAL.length && !UI.modalOpen) showTutorial(S.tutorialStep || 0);
@@ -70,6 +70,7 @@
   let lastPhase = null;
   function frame() {
     requestAnimationFrame(frame);
+    if (typeof QUICK !== 'undefined' && QUICK && !QUICK.done) quickTick(performance.now());
     if (!ARENA) return;
     const m = ARENA, now = performance.now();
     const before = m.parts.map(p => p.answered);
@@ -91,6 +92,7 @@
       if (r.loot && r.loot.length) UI.lastResult += ` · pradă: ${r.loot.map(l => esc(l.text)).join(', ')}`;
       setPetState(r.win || r.place === 1 ? 'correct' : 'idle', 1500);
       if (UI.centerTab !== 'arena') toast('Meci încheiat: ' + UI.lastResult.replace(/<[^>]+>/g, ''));
+      if (r.unlocked && r.unlocked.length) toast('Nou deblocat: ' + r.unlocked.map(f => f.name).join(', '), 'warn');
     }
     lastPhase = m.phase;
     if (m.phase !== 'done') {
@@ -105,7 +107,7 @@
       const away = Date.now() - hiddenAt;
       hiddenAt = null;
       lastReal = performance.now();
-      catchUp(away * UI.speed, away > 60000);
+      catchUp(away * UI.speed, away > 60000 && !(QUICK && !QUICK.done)); // nu acoperi un quiz în curs
       renderAll();
     }
   });
