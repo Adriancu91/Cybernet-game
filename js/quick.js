@@ -32,11 +32,15 @@ function quickDTFor(mode, correct, full) {
   const per = mode === 'survival' ? Q.survival.dtPerCorrect : Q.dtPerCorrect;
   return Math.floor(correct * per * (full ? 1 : Q.reducedMult));
 }
-function quickAIUses() { return CONFIG.QUICK.aiUses + (equippedOfType('core') ? CONFIG.QUICK.coreBonusAI : 0); }
+// ajutorul AI-ului crește cu teritoriul (js/territory.js): folosiri în plus, precizie, secunde, 50/50
+function quickTerrHelp() { return typeof territoryHelp === 'function' ? territoryHelp() : { askExtra: 0, accBonus: 0, timeBonusSec: 0, fiftyExtra: 0 }; }
+function quickAIUses() { return CONFIG.QUICK.aiUses + (equippedOfType('core') ? CONFIG.QUICK.coreBonusAI : 0) + quickTerrHelp().askExtra; }
+function quickFiftyUses() { return CONFIG.QUICK.fiftyUses + quickTerrHelp().fiftyExtra; }
+function quickTimeMs() { return CONFIG.QUICK.timeMs + quickTerrHelp().timeBonusSec * 1000; }
 
 // ---------- dificultate ----------
 function quickDiff(m) {
-  const [lo, hi] = CONFIG.LEAGUES[m.league].diff;
+  const [lo, hi] = m.duel ? m.duel.diff : CONFIG.LEAGUES[m.league].diff;
   if (m.mode === 'survival') return clamp(lo + Math.floor(m.correct / CONFIG.QUICK.survival.diffEvery), 1, CONFIG.QUICK.survival.maxDiff);
   return clamp(lo + Math.floor((hi - lo + 1) * m.i / m.n), lo, hi); // crește ușor pe parcursul jocului
 }
@@ -44,26 +48,28 @@ function quickDiff(m) {
 // ---------- start ----------
 function whyQuick() {
   if (QUICK && !QUICK.done) return 'Un joc este deja în desfășurare';
+  if (typeof TFG !== 'undefined' && TFG && !TFG.done) return 'Termină mai întâi sprintul Adevărat sau Fals';
   if (typeof arenaBusy === 'function' && arenaBusy()) return 'Termină mai întâi meciul din Arenă';
   return '';
 }
-function startQuickGame(mode, now, today) {
-  mode = mode === 'survival' ? 'survival' : 'quick';
+// mode: 'quick' | 'survival' | 'duel' (duelurile pentru Teritoriu: opts = { n, duel })
+function startQuickGame(mode, now, today, opts) {
+  mode = mode === 'survival' ? 'survival' : mode === 'duel' && opts && opts.duel ? 'duel' : 'quick';
   const r = whyQuick(); if (r) return fail(r);
   const d = quickDay(today);
   S.quick.dayGames++;
   const Q = CONFIG.QUICK;
   QUICK = {
     mode, league: S.player.league, full: d.full,
-    n: mode === 'quick' ? Q.questions : Infinity,
+    n: mode === 'quick' ? Q.questions : mode === 'duel' ? opts.n : Infinity,
     lives: mode === 'survival' ? Q.survival.lives : 0,
     i: 0, answered: 0, correct: 0, streak: 0, bestStreak: 0, bestMult: 1, score: 0, cr: 0,
-    aiLeft: quickAIUses(), fiftyLeft: Q.fiftyUses,
+    aiLeft: quickAIUses(), fiftyLeft: quickFiftyUses(), timeMs: quickTimeMs(), time: 0, duel: mode === 'duel' ? opts.duel : null,
     used: new Set(), q: null, qStart: now, phase: 'question', revealUntil: 0,
     removed: [], aiHint: null, last: null, done: false, result: null, day: S.quick.day, hist: [],
   };
   quickNextQuestion(QUICK, now);
-  return ok(mode === 'quick' ? 'Quiz Rapid început' : 'Supraviețuire începută');
+  return ok(mode === 'quick' ? 'Quiz Rapid început' : mode === 'duel' ? 'Duel început' : 'Supraviețuire începută');
 }
 function quickNextQuestion(m, now) {
   const d = quickDiff(m);
@@ -74,6 +80,7 @@ function quickNextQuestion(m, now) {
   m.qStart = now;
   m.phase = 'question';
   m.removed = []; m.aiHint = null; m.last = null;
+  if (m.duel && typeof duelPlanQuestion === 'function') duelPlanQuestion(m, now);
 }
 
 // ---------- ajutoare ----------
@@ -82,7 +89,8 @@ function quickAskAI(m) {
   if (m.aiHint) return fail('AI-ul ți-a sugerat deja un răspuns');
   if (m.aiLeft <= 0) return fail('Ai folosit deja „Întreabă AI-ul” în acest joc');
   const q = m.q, P = S.player;
-  const prob = answerProb(q.kind === 'math' ? P.math : P.trivia, q.diff);
+  const base = answerProb(q.kind === 'math' ? P.math : P.trivia, q.diff);
+  const prob = Math.max(base, Math.min(CONFIG.TERRITORY ? CONFIG.TERRITORY.accCap : CONFIG.AI.pMax, base + quickTerrHelp().accBonus));
   const right = rand() < prob;
   const wrongs = q.options.filter(o => o !== q.answer && !m.removed.includes(o));
   const pickOpt = right || !wrongs.length ? q.answer : pick(wrongs);
@@ -106,16 +114,18 @@ function quickFifty(m) {
 function quickAnswer(m, choice, now) {
   if (!m || m.done || m.phase !== 'question') return fail('Nicio întrebare activă');
   const Q = CONFIG.QUICK;
-  const t = now - m.qStart;
-  const timeout = choice === null || t >= Q.timeMs;
+  const t = now - m.qStart, T = m.timeMs || Q.timeMs;
+  const timeout = choice === null || t >= T;
   const right = !timeout && checkAnswer(m.q, choice);
   m.answered++; m.i++;
   m.hist.push(right);
+  m.time = (m.time || 0) + Math.min(t, T);
+  if (m.duel && typeof duelOppAnswer === 'function') duelOppAnswer(m); // adversarul își arată răspunsul
   let pts = 0, cr = 0, mult = quickComboMult(m.streak);
   if (right) {
-    const speed = 1 - clamp(t / Q.timeMs, 0, 1);
+    const speed = 1 - clamp(t / T, 0, 1);
     pts = Math.round((Q.pointsBase + Q.pointsSpeed * speed) * mult);
-    cr = quickCRFor(m.mode, m.streak, m.league, m.full);
+    cr = m.duel ? 0 : quickCRFor(m.mode, m.streak, m.league, m.full); // duelul plătește la final
     m.correct++; m.streak++; m.score += pts; m.cr += cr;
     m.bestStreak = Math.max(m.bestStreak, m.streak);
     m.bestMult = Math.max(m.bestMult, mult);
@@ -135,7 +145,8 @@ function quickOver(m) { return m.mode === 'survival' ? m.lives <= 0 : m.i >= m.n
 function quickUpdate(now) {
   const m = QUICK;
   if (!m || m.done) return false;
-  if (m.phase === 'question' && now - m.qStart >= CONFIG.QUICK.timeMs) { quickAnswer(m, null, now); return true; }
+  if (m.phase === 'question' && now - m.qStart >= (m.timeMs || CONFIG.QUICK.timeMs)) { quickAnswer(m, null, now); return true; }
+  if (m.duel && typeof duelTick === 'function' && duelTick(m, now)) return true;
   if (m.phase === 'reveal' && now >= m.revealUntil) {
     if (quickOver(m)) finishQuick(m, false);
     else quickNextQuestion(m, now);
@@ -148,6 +159,7 @@ function quickUpdate(now) {
 function finishQuick(m, abandoned) {
   if (!m || m.done) return m ? m.result : null;
   m.done = true; m.phase = 'done';
+  if (m.duel && typeof duelFinish === 'function') { m.result = duelFinish(m, abandoned); return m.result; }
   const Q = CONFIG.QUICK, sq = S.quick;
   const res = { mode: m.mode, abandoned: !!abandoned, correct: m.correct, answered: m.answered, total: m.mode === 'quick' ? m.n : m.answered,
     score: m.score, bestStreak: m.bestStreak, bestMult: m.bestMult, full: m.full, cr: 0, dt: 0, card: null, energy: 0, tax: 0, record: false, perfect: false, unlocked: [] };
@@ -195,20 +207,20 @@ const FEATURES = [
   { id: 'ai',     name: 'Laboratorul AI', desc: 'AI-ul tău îți pune întrebări; primești Recalibratoare și șanse la cărți Unice.', panel: 'center', tab: 'ai' },
   { id: 'album',  name: 'Albumul de cărți', desc: 'Colecționezi toate tipurile și raritățile pentru fragmente bonus.', panel: 'right', tab: 'album' },
   { id: 'stands', name: 'Standuri de antrenament', desc: 'Construiești standuri care multiplică antrenamentul AI-ului per DT.', panel: 'left', tab: null },
-  { id: 'land',   name: 'Terenul', desc: 'Cumperi teren pe serverul global și explorezi sectoare pentru recompense.', panel: 'center', tab: 'land' },
+  { id: 'land',   name: 'Teritoriul', desc: 'Câștigi dueluri de quiz ca să cucerești sectoare; mai mult teritoriu = AI-ul tău te ajută mai mult.', panel: 'center', tab: 'land' },
   { id: 'season', name: 'Sezonul', desc: 'Misiuni zilnice, clasamente, realizări și recompense de sezon.', panel: 'center', tab: 'season' },
   { id: 'guild',  name: 'Breasla', desc: 'Intri într-o breaslă: bonus de 10% la câștiguri, sediu și cosmetice.', panel: 'right', tab: 'guild' },
 ];
 function featureById(id) { return FEATURES.find(f => f.id === id) || null; }
 function gamesPlayed() {
-  return (S.quick.played || 0) + (S.quick.survPlayed || 0) + counter('soloPlayed') + counter('multiPlayed');
+  return (S.quick.played || 0) + (S.quick.survPlayed || 0) + counter('soloPlayed') + counter('multiPlayed') + counter('duelPlayed') + counter('tfPlayed');
 }
 function unlockAt(id) { const n = CONFIG.UNLOCK[id]; return n === undefined ? 0 : n; }
 function isUnlocked(id) { return !!(S.unlock && S.unlock.all) || gamesPlayed() >= unlockAt(id); }
 function lockReason(id) {
   if (isUnlocked(id)) return '';
   const n = unlockAt(id), left = n - gamesPlayed();
-  return `Se deblochează după ${n} jocuri — mai ai ${left === 1 ? 'un joc' : left + ' jocuri'} (Quiz Rapid, Supraviețuire sau Arenă)`;
+  return `Se deblochează după ${n === 1 ? 'primul joc' : n + ' jocuri'} — mai ai ${left === 1 ? 'un joc' : left + ' jocuri'} (Quiz Rapid, Supraviețuire, Adevărat sau Fals ori Arenă)`;
 }
 // marchează și întoarce funcțiile deblocate de curând (neanunțate încă)
 function checkUnlocks() {
@@ -241,9 +253,17 @@ function saveHasProgress(d) {
 // ============================================================
 function nextStep(today) {
   const p = S.player;
+  const terr = typeof territoryCount === 'function' && S.territory && S.territory.owner && S.territory.owner.length;
+  // un sector atacat are prioritate maximă: altfel îl pierzi
+  if (terr && S.duel.attacks.length) {
+    const a = S.duel.attacks.slice().sort((x, y) => x.until - y.until)[0];
+    const o = terrOwnerInfo(a.idx, a.by);
+    return { id: 'defend', text: `⚠ ${o.name} îți atacă sectorul ${terrCell(a.idx).label}! Câștigă duelul în ${fmtTime(a.until - S.time)} sau îl pierzi.`, label: '⚔️ Apără', act: 'terrDefend', args: a.idx, why: whyDuel(a.idx), urgent: true };
+  }
   const dly = dailyInfo(today || todayStr());
   if (!dly.claimed) return { id: 'daily', text: `Revendică bonusul zilnic: +${fmt(dly.cr)} CR și +${dly.dt} DT.`, label: 'Revendică', act: 'claimDaily' };
   if (!S.quick.played) return { id: 'firstQuick', text: 'Joacă primul tău Quiz Rapid: răspunzi tu la 10 întrebări și câștigi CR și DT.', label: '▶ Joacă', act: 'startQuick' };
+  if (terr && isUnlocked('land') && !S.duel.captures && territoryCount() <= 1) return { id: 'firstSector', text: 'Cucerește primul sector: câștigă un duel de 7 întrebări cu un vecin. Fiecare sector îți dă bonusuri, iar AI-ul tău te ajută tot mai mult.', label: '⚔️ Teritoriu', act: 'gotoFeature', args: 'land' };
   if (p.dt >= 10) {
     const stat = p.math <= p.trivia ? 'math' : 'trivia';
     return { id: 'train', text: `Ai ${p.dt} DT: antrenează-ți AI-ul (${stat === 'math' ? 'IQ matematic' : 'cultură generală'}) ca să te ajute la întrebări.`, label: 'Antrenează ×10', act: 'train', args: { stat, n: 10 }, why: whyTrain(10) };
@@ -253,5 +273,10 @@ function nextStep(today) {
   if (!counter('soloPlayed') && p.stamina > 0) return { id: 'solo', text: 'Încearcă Arena Solo: AI-ul tău răspunde singur, tu doar îl urmărești.', label: 'Pornește Solo', act: 'startSolo', why: whySolo() };
   const f = S.unlock.fresh && featureById(S.unlock.fresh);
   if (f) return { id: 'fresh', text: `Nou deblocat: ${f.name} — ${f.desc}`, label: 'Deschide', act: 'gotoFeature', args: f.id };
+  if (typeof startTF === 'function' && !counter('tfPlayed')) return { id: 'tf', text: `Încearcă Adevărat sau Fals: ${CONFIG.TF.durationMs / 1000} de secunde, tu decizi dacă afirmațiile sunt adevărate. Greșit = −${CONFIG.TF.penaltyMs / 1000} secunde.`, label: '✓✗ Joacă', act: 'startTF', why: whyTF() };
+  if (terr && isUnlocked('land') && terrMap().some(c => terrAttackable(c.i) && !((S.territory.cd[c.i] || 0) > S.time))) {
+    const h = territoryHelp(), nx = h.next;
+    return { id: 'expand', text: nx ? `Extinde-ți teritoriul: la ${nx.n} sectoare primești ${terrMilestoneText(nx)} (ai ${h.sectors}).` : 'Extinde-ți teritoriul: fiecare sector în plus îți crește CR-ul din toate jocurile.', label: '⚔️ Teritoriu', act: 'gotoFeature', args: 'land' };
+  }
   return { id: 'survival', text: S.quick.survBest ? `Bate-ți recordul la Supraviețuire (record ${S.quick.survBest}).` : 'Încearcă Supraviețuirea: 3 vieți, întrebări tot mai grele.', label: '♥ Supraviețuire', act: 'startSurvival' };
 }

@@ -58,28 +58,13 @@ function actBuyDT(n) {
 }
 
 // ---------- land ----------
-function whyBuyLand(n) {
-  if (!(n >= 1)) return 'Alege o parcelă';
-  if (n > CONFIG.LAND.heavyPlot && serverFrozen()) return 'Infrastructură înghețată: ' + fmtTime(S.server.freezeUntil - S.time);
-  if (usedSpace() + n > S.server.total) return 'Spațiu liber insuficient pe Serverul global';
-  if (!canPayCR(n * landPrice())) return `Îți mai trebuie ${fmt(n * landPrice() - S.player.cr)} CR`;
-  return '';
-}
-function actBuyLand(n) {
-  const r = whyBuyLand(n); if (r) return fail(r);
-  const cost = n * landPrice();
-  spendCR(cost, 'land');
-  S.player.land += n;
-  log('SERVER', `Ai cumpărat ${fmt(n)} SU de teren cu ${fmt(cost)} CR.`);
-  checkServerCapacity();
-  return ok(`+${n} SU teren`);
-}
+// Terenul nu se mai cumpără: vine din sectoarele cucerite în Teritoriu (js/territory.js).
 
 // ---------- stands ----------
 function whyBuildStand() {
   const t = CONFIG.STAND_TIERS[0];
   if (S.stands.length >= CONFIG.MAX_STANDS) return `Maximum ${CONFIG.MAX_STANDS} standuri`;
-  if (landFree() < t.land) return `Îți mai trebuie ${t.land - landFree()} SU de teren liber`;
+  if (landFree() < t.land) return `Îți mai trebuie ${t.land - landFree()} SU de teren liber — cucerește sectoare în Teritoriu`;
   if (!canPayCR(t.cost)) return `Îți mai trebuie ${fmt(t.cost - S.player.cr)} CR`;
   return '';
 }
@@ -97,9 +82,8 @@ function whyUpgradeStand(id) {
   if (s.tier >= CONFIG.STAND_TIERS.length - 1) return 'Nivel maxim (x10)';
   const nx = CONFIG.STAND_TIERS[s.tier + 1];
   if (S.player.league < nx.league) return `Necesită liga ${CONFIG.LEAGUES[nx.league].name}`;
-  if (s.tier + 1 >= CONFIG.HEAVY_STAND_TIER && serverFrozen()) return 'Infrastructură înghețată: ' + fmtTime(S.server.freezeUntil - S.time);
   const extra = nx.land - CONFIG.STAND_TIERS[s.tier].land;
-  if (landFree() < extra) return `Îți mai trebuie ${fmt(extra - landFree())} SU de teren liber`;
+  if (landFree() < extra) return `Îți mai trebuie ${fmt(extra - landFree())} SU de teren liber — cucerește sectoare în Teritoriu`;
   if (!canPayCR(nx.cost)) return `Îți mai trebuie ${fmt(nx.cost - S.player.cr)} CR`;
   return '';
 }
@@ -253,7 +237,6 @@ function actUpgradeHQ() {
   g.land += c.landNeeded;
   g.hq++;
   log('GUILD', `[${g.tag}] Sediul breslei, nivelul ${g.hq}, a fost construit (${fmt(c.landNeeded)} SU teren de breaslă + taxă ${fmt(c.fee)} GV).`);
-  checkServerCapacity();
   return ok('Sediul breslei: nivelul ' + g.hq);
 }
 function actBuyCosmetic(id) {
@@ -353,7 +336,7 @@ function actRebirth() {
   p.math = CONFIG.START.math; p.trivia = CONFIG.START.trivia; p.speedPoints = 0;
   p.rating = CONFIG.START.rating; p.league = 0;
   S.stands = [];
-  log('SYSTEM', `RENAȘTERE NEURALĂ #${p.rebirths}: +${gain} Moștenire (acum ${p.legacy}, bonus permanent +${Math.round(legacyBonus() * 100)}% la antrenament și CR). Statisticile și standurile au fost resetate; cărțile, terenul, CR, breasla și elementele cosmetice se păstrează.`);
+  log('SYSTEM', `RENAȘTERE NEURALĂ #${p.rebirths}: +${gain} Moștenire (acum ${p.legacy}, bonus permanent +${Math.round(legacyBonus() * 100)}% la antrenament și CR). Statisticile și standurile au fost resetate; cărțile, teritoriul, CR, breasla și elementele cosmetice se păstrează.`);
   return ok('Renaștere neurală reușită');
 }
 function actSetName(name) {
@@ -363,47 +346,7 @@ function actSetName(name) {
   return ok('Nume salvat');
 }
 
-// ---------- exploring land tiles ----------
-function tileCount() { return Math.floor(S.player.land / CONFIG.EXPLORE.tileSU); }
-function tilesExplored() { return Object.keys(S.player.tiles || {}).length; }
-function whyExplore(i) {
-  if (!Number.isInteger(i) || i < 0 || i >= tileCount()) return 'Sectorul nu se află pe terenul tău';
-  if (S.player.tiles[i]) return 'Deja explorat';
-  return '';
-}
-function actExplore(i) {
-  i = Number(i);
-  const r = whyExplore(i); if (r) return fail(r);
-  const T = CONFIG.EXPLORE.table;
-  const e = T[weightedIndex(T.map(x => x.weight))];
-  let text = '', kind = e.kind;
-  if (kind === 'dt') text = `+${addDT(randInt(e.min, e.max))} DT`;
-  else if (kind === 'cr') text = `+${fmt(addCR(randInt(e.min, e.max), 'explore'))} CR`;
-  else if (kind === 'shards') text = `+${addShards(randInt(e.min, e.max))} Fragmente`;
-  else if (kind === 'jackpot') text = `JACKPOT +${fmt(addCR(randInt(e.min, e.max), 'explore'))} CR`;
-  else {
-    const n = giveCard(mintCard({}), 'explorare teren');
-    if (n) text = `Carte: ${cardLabel(n)}`;
-    else { kind = 'dt'; text = `+${addDT(5)} DT (inventar plin)`; }
-  }
-  S.player.tiles[i] = kind === 'card' ? 'n' : kind[0]; // 'n' = card (kept from v1 saves)
-  count('tilesExplored');
-  if (kind === 'card' || kind === 'jackpot') log('SYSTEM', `Explorare sector #${i + 1}: ${text}`);
-  return Object.assign(ok(text), { kind });
-}
-function actExploreAll(max) {
-  const n = tileCount(), got = { dt: 0, cr: 0, shards: 0, card: 0, j: 0 };
-  let done = 0;
-  const crBefore = S.player.cr, dtBefore = S.player.dt, shBefore = S.player.shards;
-  for (let i = 0; i < n && done < (max || 1e9); i++) {
-    if (S.player.tiles[i]) continue;
-    const r = actExplore(i);
-    if (r.ok) { done++; if (r.kind === 'card') got.card++; if (r.kind === 'jackpot') got.j++; }
-  }
-  if (!done) return fail('Nu mai e nimic de explorat - cumpără mai mult teren');
-  log('SYSTEM', `Sectoare explorate: ${done}.`);
-  return ok(`Sectoare explorate: ${done} · +${fmt(S.player.cr - crBefore)} CR, +${S.player.dt - dtBefore} DT, +${S.player.shards - shBefore} Fragmente${got.card ? `, cărți: ${got.card}` : ''}${got.j ? `, jackpot: ${got.j}` : ''}`);
-}
+// Explorarea terenului s-a mutat în Teritoriu: prima cucerire a unui sector dă recompensa de explorare (terrExploreReward).
 
 // ---------- always-available income ----------
 function todayStr(d) { d = d || new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }

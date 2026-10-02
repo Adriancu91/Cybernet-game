@@ -7,7 +7,7 @@
 
   function snapshot() {
     const g = playerGuild();
-    return { cr: S.player.cr, dt: S.player.dt, sold: counter('cardSold') + counter('nftSold'), comm: S.market.standEarned, exp: S.server.expansions, vault: g ? g.vault : null };
+    return { cr: S.player.cr, dt: S.player.dt, sold: counter('cardSold') + counter('nftSold'), comm: S.market.standEarned, terr: typeof territoryCount === 'function' ? territoryCount() : 0, vault: g ? g.vault : null };
   }
   function catchUp(ms, showSummary) {
     ms = Math.min(ms, CONFIG.OFFLINE_CAP_HOURS * CONFIG.HOUR);
@@ -33,7 +33,7 @@
     renderLogShell();
     if (isNew) {
       log('SYSTEM', 'Bine ai venit, operatorule. AI-ul tău este online. Antrenează-l, apoi intră în Arenă.');
-      log('SERVER', `Rețeaua globală este online: capacitate ${fmt(S.server.total)} SU, ${fmtPct(usedRatio() * 100)} ocupat.`);
+      log('SYSTEM', 'Ai primit un sector de bază în Cartierul Neon. Câștigă dueluri de quiz ca să cucerești sectoarele vecine (fila Teritoriu).');
       saveGame();
     } else {
       const away = Date.now() - (S.realTs || Date.now());

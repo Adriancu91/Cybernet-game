@@ -40,7 +40,7 @@ function initWorld() {
   S.market.demand = {};
   for (const t of CONFIG.CARDS.types) S.market.demand[t.id] = randRange(0.85, 1.15);
   for (let i = 0; i < CONFIG.MARKET.botListingsTarget; i++) botListCard();
-  S.server.history.push({ t: 0, total: S.server.total, used: usedSpace() });
+  if (typeof initTerritory === 'function') initTerritory();
   if (typeof ensureMissions === 'function') ensureMissions();
 }
 function newGuild(name, tag, isPlayer) {
@@ -121,7 +121,8 @@ function bonuses() {
 }
 function legacyBonus() { return Math.min(CONFIG.PRESTIGE.legacyCap, S.player.legacy * CONFIG.PRESTIGE.legacyPerPoint); }
 function guildPerk() { const g = playerGuild(); return g && g.hq > 0 ? CONFIG.GUILD.hq[g.hq - 1].perk : 0; }
-function crMultiplier() { return 1 + bonuses().eff.cr / 100 + legacyBonus(); }
+function terrHelp() { return typeof territoryHelp === 'function' ? territoryHelp() : null; }
+function crMultiplier() { const th = terrHelp(); return 1 + bonuses().eff.cr / 100 + legacyBonus() + (th ? th.crPct / 100 : 0); }
 
 // ---------- pet ----------
 function softCap() { return CONFIG.PET.softCapByLeague[S.player.league]; }
@@ -170,43 +171,16 @@ function upkeepPerHour() {
   return u;
 }
 
-// ---------- global server ----------
+// ---------- global server (dezactivat: terenul vine acum din Teritoriu; păstrat doar pentru prețul fix al terenului de breaslă) ----------
 function usedSpace() {
   let u = S.server.botLand + S.player.land;
   for (const g of S.guilds) u += g.land;
   return u;
 }
 function usedRatio() { return usedSpace() / S.server.total; }
-function landPrice() { const r = usedRatio(); return Math.ceil(CONFIG.LAND.basePrice * (1 + CONFIG.LAND.scarcityK * r * r)); }
-function serverFrozen() { return S.server.state === 'CRITICAL' && S.time < S.server.freezeUntil; }
-function checkServerCapacity() {
-  const sv = S.server;
-  if (sv.state === 'NORMAL' && 1 - usedRatio() < 1 - CONFIG.SERVER.criticalRatio) {
-    sv.state = 'CRITICAL';
-    sv.freezeUntil = S.time + CONFIG.SERVER.freezeMs;
-    sv.alarmSeen = false;
-    count('criticalEvents');
-    log('SERVER', `!! CAPACITATEA SERVERULUI ESTE CRITICĂ - spațiu liber ${fmtPct((1 - usedRatio()) * 100)}. Infrastructura grea este înghețată pentru ${fmtTime(CONFIG.SERVER.freezeMs)}.`);
-  }
-}
-function serverStep() {
-  const sv = S.server;
-  if (sv.state === 'CRITICAL' && S.time >= sv.freezeUntil) {
-    const old = sv.total;
-    sv.total = Math.floor(sv.total * CONFIG.SERVER.expandFactor);
-    sv.state = 'NORMAL';
-    sv.expansions++;
-    count('expansions');
-    sv.history.push({ t: S.time, total: sv.total, used: usedSpace() });
-    log('SERVER', `Reechilibrare încheiată. Capacitatea globală a crescut de la ${fmt(old)} la ${fmt(sv.total)} SU (extinderea #${sv.expansions}).`);
-  }
-  checkServerCapacity();
-}
-function recordServerHistory() {
-  const h = S.server.history;
-  h.push({ t: S.time, total: S.server.total, used: usedSpace() });
-  if (h.length > CONFIG.SERVER.historyMax) h.splice(0, h.length - CONFIG.SERVER.historyMax);
-}
+function landPrice() { return CONFIG.LAND.basePrice; }
+function serverFrozen() { return false; }
+function checkServerCapacity() { }
 
 // ---------- DT price ----------
 function dtRecentBought() {
@@ -231,7 +205,8 @@ function step(dtMs) {
 
   // DT trickle
   if (p.dt < CONFIG.DT.stockCap) {
-    p.dtAcc += dtMs * (1 + b.eff.dt / 100 + guildPerk() / 100);
+    const th = terrHelp();
+    p.dtAcc += dtMs * (1 + b.eff.dt / 100 + guildPerk() / 100 + (th ? th.dtPct / 100 : 0));
     while (p.dtAcc >= CONFIG.DT.trickleEveryMs && p.dt < CONFIG.DT.stockCap) { p.dt++; p.dtAcc -= CONFIG.DT.trickleEveryMs; }
     if (p.dt >= CONFIG.DT.stockCap) p.dtAcc = 0;
   } else p.dtAcc = 0;
@@ -269,16 +244,10 @@ function step(dtMs) {
   if (S.time - e.hour.start >= CONFIG.HOUR) {
     e.lastHour = { minted: e.hour.minted, burned: e.hour.burned };
     e.hour = { start: S.time, minted: 0, burned: 0 };
-    recordServerHistory();
   }
 
-  // bots buy land
-  const sv = S.server;
-  if (1 - usedRatio() > 0.05) {
-    sv.botBuyAcc += sv.total * CONFIG.SERVER.botBuyPerHour * dtMs / CONFIG.HOUR;
-    if (sv.botBuyAcc >= 1) { const n = Math.floor(sv.botBuyAcc); sv.botBuyAcc -= n; sv.botLand += n; }
-  }
-  serverStep();
+  // teritoriu: boții își mută granițele, atacuri asupra sectoarelor tale
+  if (typeof territoryStep === 'function') territoryStep(dtMs);
 
   if (typeof guildStep === 'function') guildStep(dtMs);
   if (typeof marketStep === 'function') marketStep(dtMs);

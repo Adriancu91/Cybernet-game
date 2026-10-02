@@ -38,3 +38,16 @@ exactly as before (progress saved on the device only) and the account button is 
 ## Free plan limits (enough for friends & family)
 500 MB database (a save is ~60 KB → thousands of players), unlimited API calls. A free project is paused after
 7 days without any activity; it wakes up from the Supabase dashboard (one click).
+
+## Top realizări umane (global top)
+`supabase/setup.sql` also creates the `cn_records` table and two functions:
+- `cn_records_submit(user, pin, records)` — PIN-checked; stores the player's own records
+  (Supraviețuire, Quiz Rapid, Adevărat/Fals, correct answers, duels won, territory). Records never decrease
+  (territory can) and absurd values are capped.
+- `cn_top(kind, limit)` — public read of the top for one category (`surv`, `quick`, `tf`, `correct`, `duels`, `territory`):
+  only the account ID and the value.
+
+If you set up the database before this feature existed, just run `setup.sql` again (it is safe to re-run).
+With cloud enabled, the 🏆 Top card in the Arena mixes real players (badge **👤 real**) with the simulated ones;
+logged-in players' records are sent automatically when they change. Without cloud (or if the server is down)
+the Top works offline with the simulated players only.

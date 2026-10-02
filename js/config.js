@@ -19,7 +19,7 @@ const CONFIG = {
   START: {
     cr: 1500,
     dt: 25,
-    land: 20,
+    land: 100,                 // derivat din teritoriu: CONFIG.TERRITORY.baseSU + suPerSector × sectoare
     shards: 0,
     math: 200,
     trivia: 200,
@@ -60,21 +60,14 @@ const CONFIG = {
     { mult: 8,  cost: 40000,  land: 200, upkeep: 500,  league: 3 },
     { mult: 10, cost: 150000, land: 500, upkeep: 1800, league: 4 },
   ],
-  HEAVY_STAND_TIER: 2,         // tiers >= this index (x6+) freeze during server critical
   DEMOLISH_REFUND: 0.5,
 
   // ---------- land & global server ----------
   LAND: {
-    basePrice: 20,             // CR per SU at 0% usage
-    scarcityK: 3,              // price = base * (1 + k * usedRatio^2)
-    plots: [10, 50, 100, 500, 1000],
-    heavyPlot: 100,            // plots > this freeze during critical
+    basePrice: 20,             // GV per SU de teren de breaslă (preț fix; terenul jucătorului vine din Teritoriu)
   },
-  // ---------- exploring your land ----------
+  // ---------- explorarea unui sector: recompensă unică la prima cucerire în Teritoriu ----------
   EXPLORE: {
-    tileSU: 10,                // every 10 SU you own = 1 unexplored tile
-    pageSize: 200,             // tiles shown per page
-    // one-time reward per tile (fixed amounts, so buying land just to explore never pays off)
     table: [
       { kind: 'dt',     weight: 40, min: 2,  max: 8 },
       { kind: 'cr',     weight: 35, min: 15, max: 90 },
@@ -82,6 +75,51 @@ const CONFIG = {
       { kind: 'card',   weight: 4 },
       { kind: 'jackpot', weight: 4, min: 200, max: 600 },
     ],
+  },
+  // ---------- TERITORIU: sectoare cucerite prin dueluri de quiz ----------
+  TERRITORY: {
+    size: 7,                   // harta = 7 × 7 = 49 de sectoare
+    home: 45,                  // sectorul de start (x 3, y 6 — marginea de jos, Cartierul Neon)
+    baseSU: 50,                // teren (SU) = baseSU + suPerSector × sectoare deținute
+    suPerSector: 50,           //   → 1 sector = 100 SU, 49 de sectoare = 2.500 SU (ajunge pentru 3 standuri x10 + standul de piață)
+    neutralShare: 0.25,        // cât din hartă e neutru la început
+    questions: 7,              // întrebări într-un duel
+    cooldownMs: 10 * 60000,    // după un duel pierdut, sectorul se poate ataca din nou după 10 min
+    loseCRPerCorrect: 5,       // consolare la înfrângere: CR per răspuns corect x recompensa ligii
+    // puterea adversarului după inelul hărții (exterior → centru)
+    tiers: [
+      { name: 'Ușor',  diff: [1, 3], acc: 0.55, tMin: 5000, tMax: 11000, winCR: 60,  winDT: 6,  color: '#39d98a' },
+      { name: 'Mediu', diff: [3, 5], acc: 0.65, tMin: 4500, tMax: 10000, winCR: 120, winDT: 10, color: '#ffb020' },
+      { name: 'Greu',  diff: [5, 7], acc: 0.75, tMin: 4000, tMax: 9000,  winCR: 250, winDT: 15, color: '#ff7a2f' },
+      { name: 'Boss',  diff: [7, 9], acc: 0.85, tMin: 3500, tMax: 8000,  winCR: 600, winDT: 25, color: '#ff3b5c' },
+    ],
+    crPctPerSector: 1,         // +1% CR din toate jocurile pentru fiecare sector în afară de bază
+    crPctCap: 30,
+    accCap: 0.97,              // precizia sugestiei AI-ului nu trece de 97%
+    // praguri: cumulative, se adună
+    milestones: [
+      { n: 3,  timeSec: 2 },
+      { n: 6,  acc: 0.05 },
+      { n: 10, ask: 1 },
+      { n: 15, timeSec: 3 },
+      { n: 20, acc: 0.05 },
+      { n: 25, ask: 1 },
+      { n: 32, acc: 0.05 },
+      { n: 40, ask: 1 },
+      { n: 49, timeSec: 5 },
+    ],
+    district: { fifty: 1, fiftyCap: 3, dtPct: 10 },   // fiecare cartier întreg: +1 50/50 (max +3) și +10% flux DT
+    attack: {
+      firstAfterMs: 2 * 3600000,   // primul atac vine la cel puțin 2 h după ce ai 3 sectoare
+      minGapMs: 3 * 3600000,       // apoi la 3–6 h (timp de joc)
+      maxGapMs: 6 * 3600000,
+      timerMs: 12 * 3600000,       // ai 12 h să aperi sectorul
+      maxActive: 2,                // niciodată mai mult de 2 atacuri deodată (și după o absență lungă)
+      minSectors: 3,
+      defendCR: 80,                // bonus la apărare reușită x recompensa ligii
+      defendDT: 8,
+    },
+    botMovesPerHour: 4,        // cât de des își schimbă boții sectoarele între ei
   },
   SERVER: {
     startTotal: 30000,
@@ -255,6 +293,29 @@ const CONFIG = {
     survival: { lives: 3, crPerCorrect: 8, dtPerCorrect: 1, diffEvery: 5, maxDiff: 10 },
   },
 
+  // ---------- Adevărat sau Fals (sprint de 60 s, JUCĂTORUL răspunde) — js/tf.js ----------
+  TF: {
+    durationMs: 60000,         // durata sprintului
+    penaltyMs: 3000,           // răspuns greșit = −3 secunde
+    explainMs: 1100,           // explicația după un răspuns greșit (ceasul stă pe loc)
+    pointsBase: 100,           // scor per răspuns corect x combo
+    combo: [1, 1.5, 2, 3],     // multiplicator; crește la fiecare `comboEvery` corecte la rând
+    comboEvery: 3,
+    crPerCorrect: 3,           // CR per corect = bază x recompensa ligii x combo (x bonusul cărților); limita zilnică e cea de la QUICK
+    dtPerCorrect: 0.35,        // DT = corecte x 0,35 (rotunjit în jos)
+    diffEvery: 6,              // dificultatea maximă a afirmațiilor crește la fiecare 6 răspunsuri
+    bankShare: 0.25,           // cât din afirmații vin din banca de întrebări („«întrebare» — răspuns”)
+    recentMemory: 200,         // câte afirmații văzute recent sunt evitate (se păstrează în salvare)
+    petHint: { minStat: 400, fullStat: 4000, maxChance: 0.35 }, // indiciul „🤖 AI-ul crede…”
+  },
+
+  // ---------- Top realizări umane — js/top.js ----------
+  TOP: {
+    show: 20,                  // câte rânduri se afișează
+    cloudLimit: 50,            // câți jucători reali se cer de la server
+    cloudCacheMs: 60000,       // topul global se reîmprospătează cel mult o dată pe minut
+  },
+
   // ---------- deblocare progresivă: câte jocuri (Quiz Rapid + Supraviețuire + Solo + Multiplayer) ----------
   UNLOCK: {
     multi: 2,                  // Arena Multiplayer
@@ -262,7 +323,7 @@ const CONFIG = {
     ai: 4,                     // Laboratorul AI
     album: 5,                  // Albumul de cărți
     stands: 6,                 // Standuri de antrenament (și economia lor)
-    land: 7,                   // Terenul și serverul global
+    land: 1,                   // Teritoriul (dueluri pentru sectoare) — bucla principală, deschis devreme
     season: 9,                 // Sezon, misiuni, clasamente, realizări
     guild: 12,                 // Breasla
   },

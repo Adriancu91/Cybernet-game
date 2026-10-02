@@ -97,6 +97,8 @@ function newState(seed) {
     tutorialStep: 0,
     quick: { day: '', dayGames: 0, played: 0, best: 0, survPlayed: 0, survBest: 0 },
     unlock: { all: false, seen: [], fresh: null },
+    territory: { owner: [], explored: {}, cd: {}, botAcc: 0, rev: 0, feed: [] },   // harta rețelei (js/territory.js)
+    duel: { wins: 0, losses: 0, captures: 0, defended: 0, lost: 0, played: 0, attacks: [], nextAttackAt: -1 },
   };
   const prev = S; S = s;
   s.server.botLand = Math.floor(s.server.total * CONFIG.SERVER.startUsedRatio);
@@ -179,12 +181,15 @@ function migrate(data) {
   }
   const oldV = data.v || 1;
   const hadUnlock = !!data.unlock;
+  const hadTerritory = !!(data.territory && Array.isArray(data.territory.owner) && data.territory.owner.length);
   fill(data, fresh);
   // salvări de dinainte de deblocarea progresivă: jucătorii cu progres nu sunt blocați
   if (!hadUnlock && typeof saveHasProgress === 'function' && saveHasProgress(data)) unlockAll(data);
   if (oldV < 2 && typeof migrateNftSave === 'function') migrateNftSave(data);
   if (data.bots.length === 0) data.bots = fresh.bots;
   if (data.guilds.length === 0) data.guilds = fresh.guilds;
+  // salvări de dinainte de Teritoriu: terenul cumpărat devine sectoare
+  if (!hadTerritory && typeof migrateTerritory === 'function') migrateTerritory(data);
   data.v = CONFIG.SAVE_VERSION;
   return data;
 }

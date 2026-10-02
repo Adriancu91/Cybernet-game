@@ -124,8 +124,7 @@ function whyBuildMarketStand() {
   const M = CONFIG.MARKET;
   if (S.market.stand) return 'Deja construit';
   if (S.player.league < M.standLeague) return `Necesită liga ${CONFIG.LEAGUES[M.standLeague].name}`;
-  if (serverFrozen()) return 'Infrastructură înghețată: ' + fmtTime(S.server.freezeUntil - S.time);
-  if (landFree() < M.standLand) return `Îți mai trebuie ${fmt(M.standLand - landFree())} SU de teren liber`;
+  if (landFree() < M.standLand) return `Îți mai trebuie ${fmt(M.standLand - landFree())} SU de teren liber — cucerește sectoare în Teritoriu`;
   if (!canPayCR(M.standCost)) return `Îți mai trebuie ${fmt(M.standCost - S.player.cr)} CR`;
   return '';
 }
@@ -133,7 +132,6 @@ function whyUpgradeMarketStand() {
   const M = CONFIG.MARKET, st = S.market.stand;
   if (!st) return 'Construiește mai întâi standul';
   if (st.level >= M.standLevels.length - 1) return 'Nivel maxim';
-  if (serverFrozen()) return 'Infrastructură înghețată: ' + fmtTime(S.server.freezeUntil - S.time);
   const c = M.standLevels[st.level + 1].cost;
   if (!canPayCR(c)) return `Îți mai trebuie ${fmt(c - S.player.cr)} CR`;
   return '';

@@ -47,12 +47,11 @@ function guildMinute(ms) {
     } else if (g !== pg) g.pending = 0;
 
     // bot guilds build their HQ on their own
-    if (!g.isPlayer && g !== pg && g.hq < CONFIG.GUILD.hq.length && !serverFrozen() && chance(1 / 180)) {
+    if (!g.isPlayer && g !== pg && g.hq < CONFIG.GUILD.hq.length && chance(1 / 180)) {
       const c = hqCost(g);
       if (c && g.vault >= c.total * 1.2) {
         g.vault -= c.total; g.land += c.landNeeded; g.hq++;
-        log('GUILD', `[${g.tag}] ${g.name} a construit Sediul breslei nivelul ${g.hq} (+${fmt(c.landNeeded)} SU de spațiu pe server).`);
-        checkServerCapacity();
+        log('GUILD', `[${g.tag}] ${g.name} a construit Sediul breslei nivelul ${g.hq} (+${fmt(c.landNeeded)} SU teren de breaslă).`);
       }
     }
   }
@@ -123,7 +122,6 @@ function whyUpgradeHQ() {
   const g = playerGuild();
   if (!g) return 'Alătură-te mai întâi unei bresle';
   if (!hqNext(g)) return 'Sediul breslei este la nivel maxim';
-  if (serverFrozen()) return 'Infrastructură înghețată: ' + fmtTime(S.server.freezeUntil - S.time);
   const c = hqCost(g);
   if (g.vault < c.total) return `Seiful mai are nevoie de ${fmt(c.total - g.vault)} GV`;
   return '';

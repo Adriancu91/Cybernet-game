@@ -45,7 +45,9 @@ function runSelfTests(opts) {
     }
     assert(S.player.recal >= 0 && Number.isInteger(S.player.recal), `${tag}: recalibrators invalid`);
     assert(S.ai.energy >= 0 && S.ai.energy <= CONFIG.AI_LAB.energyWonCap, `${tag}: AI energy ${S.ai.energy}`);
-    assert(landUsed() <= p.land, `${tag}: land used ${landUsed()} > owned ${p.land}`);
+    assert(!terrReady() || p.land === territoryLand(), `${tag}: land ${p.land} not derived from territory (${territoryLand()})`);
+    assert(!terrReady() || isPlayerSector(CONFIG.TERRITORY.home), `${tag}: home sector lost`);
+    assert(S.duel.attacks.length <= CONFIG.TERRITORY.attack.maxActive, `${tag}: too many attacks`);
     assert(petMs() >= CONFIG.PET.speedFloorMs, `${tag}: ms below floor`);
   }
   function playMatchInstant(now, useOverrides) {
@@ -64,7 +66,7 @@ function runSelfTests(opts) {
 
   test('10,000 random actions keep the state valid', () => {
     fresh(12345);
-    S.player.cr = 5e6; S.player.dt = 50; S.player.land = 3000;
+    S.player.cr = 5e6; S.player.dt = 50; terrGrowContiguous(40);
     let now = 1e6;
     const N = opts.quick ? 2000 : 10000;
     for (let i = 0; i < N; i++) {
@@ -74,7 +76,23 @@ function runSelfTests(opts) {
       switch (r) {
         case 0: actTrain(pick(['math', 'trivia', 'speed']), pick([1, 10]), bestStandId()); break;
         case 1: actBuyDT(randInt(1, 30)); break;
-        case 2: actBuyLand(pick(CONFIG.LAND.plots)); break;
+        case 2: {
+          QUICK = null;
+          const cand = terrMap().filter(c => whyDuel(c.i) === '');
+          if (cand.length && actStartDuel(pick(cand).i, now, '2026-10-' + String(randInt(1, 28)).padStart(2, '0')).ok) {
+            let t = now, g = 0;
+            while (!QUICK.done && g++ < 100) {
+              if (chance(0.2)) quickAskAI(QUICK); if (chance(0.2)) quickFifty(QUICK);
+              if (chance(0.03)) { finishQuick(QUICK, true); break; }
+              t += randInt(500, 16000);
+              if (QUICK.phase === 'question' && chance(0.8)) quickAnswer(QUICK, pick(QUICK.q.options), t);
+              quickUpdate(t); quickUpdate(t + 2000); t += 2000;
+            }
+            if (!QUICK.done) finishQuick(QUICK, true);
+            QUICK = null;
+          }
+          break;
+        }
         case 3: actBuildStand(); break;
         case 4: if (S.stands.length) actUpgradeStand(pick(S.stands).id); break;
         case 5: if (S.stands.length && chance(0.1)) actDemolishStand(pick(S.stands).id); break;
@@ -127,8 +145,8 @@ function runSelfTests(opts) {
         case 25: if (chance(0.05)) { S.player.rating = 1750; updatePlayerLeague(); actRebirth(); } break;
         case 26: actToggleLock(anyNft()); break;
         case 27: if (chance(0.2)) actCreateGuild('Test Guild ' + randInt(1, 999)); break;
-        case 29: actExplore(randInt(0, tileCount() + 2)); break;
-        case 30: if (chance(0.05)) actExploreAll(20); break;
+        case 29: if (chance(0.1)) terrSpawnAttack(); break;
+        case 30: if (chance(0.05)) simulate(CONFIG.TERRITORY.attack.timerMs / 4); break;
         case 28: S.player.rating = clamp(S.player.rating + randInt(-50, 80), 800, 2000); updatePlayerLeague(); break;
         default: simulate(randInt(1, 120) * 1000);
       }
@@ -286,29 +304,6 @@ function runSelfTests(opts) {
     assert(answerProb(1e9, 1) <= CONFIG.AI.pMax && answerProb(0, 10) >= CONFIG.AI.pMin, 'answer probability not clamped');
   });
 
-  test('Server expansion triggers once per crossing and freezes heavy purchases', () => {
-    fresh(11);
-    S.player.cr = 1e8;
-    const sv = S.server;
-    sv.botLand = Math.floor(sv.total * 0.5) - S.player.land - S.guilds.reduce((s, g) => s + g.land, 0) - 5;
-    assert(sv.state === 'NORMAL', 'should start NORMAL');
-    const r = actBuyLand(10);
-    assert(r.ok, 'crossing purchase should complete');
-    assert(sv.state === 'CRITICAL', 'did not enter CRITICAL');
-    const crit1 = counter('criticalEvents');
-    checkServerCapacity(); checkServerCapacity();
-    assert(counter('criticalEvents') === crit1, 'triggered twice');
-    assert(whyBuyLand(500).startsWith('Infrastructură înghețată'), 'big plot not frozen');
-    assert(whyBuyLand(10) === '', 'small plot should still work');
-    S.player.league = 4; S.player.land = 5000;
-    actBuildStand(); const s = S.stands[0]; s.tier = 1;
-    assert(whyUpgradeStand(s.id).startsWith('Infrastructură înghețată'), 'x6 upgrade not frozen');
-    const total = sv.total;
-    simulate(CONFIG.SERVER.freezeMs + 2000);
-    assert(sv.state === 'NORMAL' && sv.total === Math.floor(total * 1.5), 'no expansion after window');
-    assert(sv.expansions === 1, 'expansions count ' + sv.expansions);
-  });
-
   test('Human Override: max 2 per match, 1 per round', () => {
     fresh(13);
     let now = 1000;
@@ -370,7 +365,7 @@ function runSelfTests(opts) {
 
   test('Economy never produces negative balances when broke', () => {
     fresh(55);
-    S.player.land = 2000; S.player.cr = 2e5; S.player.league = 4;
+    terrGrowContiguous(39); S.player.cr = 2e5; S.player.league = 4;
     for (let i = 0; i < 3; i++) actBuildStand();
     for (const s of S.stands) while (actUpgradeStand(s.id).ok);
     S.player.cr = 0;
@@ -381,18 +376,169 @@ function runSelfTests(opts) {
     assert(!S.econ.offline && S.econ.debt === 0, 'debt not repaid');
   });
 
-  test('Land sectors can be explored only once', () => {
-    fresh(77);
-    S.player.land = 50;
-    assert(tileCount() === 5, 'tile count ' + tileCount());
-    assert(actExplore(0).ok, 'first explore failed');
-    assert(!actExplore(0).ok, 'explored twice');
-    assert(!actExplore(5).ok && !actExplore(-1).ok, 'explored outside land');
-    const r = actExploreAll();
-    assert(r.ok && tilesExplored() === 5, 'explore all');
-    assert(!actExploreAll().ok, 'explore all repeated');
-    S.player.land = 70;
-    assert(tileCount() - tilesExplored() === 2, 'new land should add new sectors');
+  // ---------- Teritoriu ----------
+  // joacă întrebarea curentă a unui duel: tu (corect/greșit, după `ms`), adversarul (corect/greșit, după `oppMs`)
+  function duelStep(t, right, oppRight, ms, oppMs) {
+    const d = QUICK.duel;
+    d.plan.right = oppRight; d.plan.t = oppMs || 5000; d.plan.timeout = false;
+    const q = QUICK.q;
+    assert(quickAnswer(QUICK, right ? q.answer : q.options.find(o => o !== q.answer), t + (ms || 1000)).ok, 'duel answer rejected');
+    const t2 = t + (ms || 1000) + CONFIG.QUICK.revealBadMs + 1;
+    quickUpdate(t2);
+    return t2;
+  }
+  function playDuel(i, mine, theirs, day) {
+    QUICK = null;
+    const r = actStartDuel(i, 0, day || '2026-10-10');
+    assert(r.ok, 'duel did not start: ' + r.msg);
+    let t = 0, k = 0;
+    while (!QUICK.done) { t = duelStep(t, mine(k), theirs(k)); k++; }
+    const res = QUICK.result; QUICK = null;
+    return res;
+  }
+
+  test('Territory: map, adjacency rule, duel win captures, loss gives cooldown', () => {
+    fresh(201); QUICK = null;
+    const T = CONFIG.TERRITORY, map = terrMap(), home = T.home;
+    assert(whyDuel(terrNeighbors(home)[0]).indexOf('primul joc') >= 0, 'territory should open after the first game');
+    count('soloPlayed'); // un joc jucat -> Teritoriul e deschis
+    assert(map.length === T.size * T.size && territoryCount() === 1 && isPlayerSector(home), 'start territory wrong');
+    const sizes = TERR_DISTRICTS.map(D => map.filter(c => c.district === D.id).length);
+    assert(sizes.join(',') === '6,6,6,6,8,8,8,1', 'district sizes ' + sizes);
+    assert(terrCell(home).district === 'neon' && terrCell(24).district === 'tower' && terrTier(24).name === 'Boss', 'districts wrong');
+    // doar vecinii teritoriului se pot ataca
+    assert(whyDuel(24).startsWith('Prea departe'), 'far sector attackable');
+    assert(whyDuel(home).indexOf('deja al tău') >= 0, 'own sector attackable');
+    const nb = terrNeighbors(home);
+    assert(nb.length === 3 && nb.every(j => whyDuel(j) === ''), 'neighbours not attackable');
+    const far = map.find(c => !c.nb.includes(home) && c.i !== home);
+    assert(whyDuel(far.i) !== '', 'non-adjacent sector attackable');
+    // victorie: sectorul devine al tău, teren +SU, recompensă unică de explorare, contează ca joc
+    const g0 = gamesPlayed(), cr0 = S.player.cr, land0 = S.player.land, day = '2026-10-11';
+    const target = nb[0];
+    const w = playDuel(target, () => true, () => false, day);
+    assert(w.win && isPlayerSector(target) && territoryCount() === 2, 'win did not capture');
+    assert(S.duel.wins === 1 && S.duel.captures === 1 && S.player.land === land0 + T.suPerSector, 'land/counters after win');
+    assert(w.explore && S.territory.explored[target] && w.cr > 0 && S.player.cr > cr0, 'win rewards missing');
+    assert(gamesPlayed() === g0 + 1 && quickDay(day).used === 1, 'duel not counted as a game');
+    // înfrângere: sectorul rămâne al botului, cooldown 10 min
+    const next = terrMap().find(c => whyDuel(c.i) === '' && c.tier === 0).i;
+    const owner = S.territory.owner[next];
+    const l = playDuel(next, () => false, () => true, day);
+    assert(!l.win && S.territory.owner[next] === owner && S.duel.losses === 1, 'loss changed the sector');
+    assert(whyDuel(next).startsWith('Adversarul se reface'), 'no cooldown after loss');
+    simulate(T.cooldownMs + 1000);
+    assert(whyDuel(next) === '' || isPlayerSector(next) === false && !terrAttackable(next), 'cooldown did not end');
+    // egalitate la răspunsuri corecte: decide timpul total
+    const tie = terrMap().find(c => whyDuel(c.i) === '').i;
+    QUICK = null; actStartDuel(tie, 0, day);
+    let t = 0; while (!QUICK.done) t = duelStep(t, true, true, 1000, 6000);
+    assert(QUICK.result.tie && QUICK.result.win, 'faster player should win a tie');
+    // renunțat fără niciun răspuns: nu e înfrângere și nu consumă un joc
+    QUICK = null;
+    const used = quickDay(day).used, losses = S.duel.losses, cand = terrMap().find(c => whyDuel(c.i) === '').i;
+    actStartDuel(cand, 0, day); finishQuick(QUICK, true); QUICK = null;
+    assert(quickDay(day).used === used && S.duel.losses === losses && whyDuel(cand) === '', 'empty abandon counted');
+    invariants('territory');
+  });
+
+  test('Territory: defense timeout loses the sector, defense win keeps it, home is never attacked', () => {
+    fresh(202); QUICK = null; count('soloPlayed');
+    const T = CONFIG.TERRITORY, home = T.home;
+    assert(terrSpawnAttack(true) === null, 'attacked with only the home sector');
+    terrGrowContiguous(3);
+    const a = terrSpawnAttack(true);
+    assert(a && a.idx !== home && isPlayerSector(a.idx), 'attack not created on a border sector');
+    assert(nextStep('2026-10-12').id === 'defend' && nextStep('2026-10-12').args === a.idx, 'defense not on top of next step');
+    const n0 = territoryCount(), land0 = S.player.land;
+    S.duel.nextAttackAt = 1e15; // fără atacuri noi în timpul testului
+    simulate(T.attack.timerMs + 2000);
+    assert(!isPlayerSector(a.idx) && territoryCount() === n0 - 1 && S.duel.lost === 1, 'ignored attack did not lose the sector');
+    assert(S.player.land === land0 - T.suPerSector && S.duel.attacks.length === 0, 'land / attack list after loss');
+    // apărare câștigată: sectorul rămâne, bonus
+    const b = terrSpawnAttack(true);
+    assert(b && whyDuel(b.idx) === '', 'defense duel not allowed');
+    const cr0 = S.player.cr;
+    const r = playDuel(b.idx, () => true, () => false);
+    assert(r.win && r.defense && isPlayerSector(b.idx) && S.duel.attacks.length === 0 && S.duel.defended === 1 && S.player.cr > cr0, 'defense win wrong');
+    // niciodată baza; cel mult maxActive atacuri, chiar și după 8 h offline
+    for (let i = 0; i < 60; i++) { const x = terrSpawnAttack(true); assert(!x || x.idx !== home, 'home attacked'); S.duel.attacks = []; }
+    terrGrowContiguous(8); S.duel.nextAttackAt = -1;
+    simulate(CONFIG.OFFLINE_CAP_HOURS * CONFIG.HOUR);
+    assert(S.duel.attacks.length <= T.attack.maxActive && isPlayerSector(home), 'offline attacks ' + S.duel.attacks.length);
+    invariants('defense');
+  });
+
+  test('Territory bonuses: milestones, caps and AI help hooks', () => {
+    fresh(203); QUICK = null;
+    const T = CONFIG.TERRITORY, Q = CONFIG.QUICK;
+    let h = territoryHelp();
+    assert(h.sectors === 1 && h.askExtra === 0 && h.crPct === 0 && h.timeBonusSec === 0 && h.next.n === T.milestones[0].n, 'start bonuses');
+    assert(Math.abs(crMultiplier() - 1) < 1e-9, 'home sector should not change CR');
+    terrGrowContiguous(9);
+    h = territoryHelp();
+    assert(h.sectors === 10 && h.askExtra === 1 && h.timeBonusSec === 2 && Math.abs(h.accBonus - 0.05) < 1e-9 && h.crPct === 9 * T.crPctPerSector, 'bonuses at 10: ' + JSON.stringify(h));
+    assert(Math.abs(crMultiplier() - (1 + h.crPct / 100)) < 1e-9, 'CR bonus not applied');
+    startQuickGame('quick', 0, '2026-10-13');
+    assert(QUICK.aiLeft === Q.aiUses + 1 && QUICK.timeMs === Q.timeMs + 2000, 'quiz help not applied');
+    quickUpdate(Q.timeMs + 1);
+    assert(!QUICK.last, 'extra seconds ignored');
+    const base = answerProb(QUICK.q.kind === 'math' ? S.player.math : S.player.trivia, QUICK.q.diff);
+    quickAskAI(QUICK);
+    assert(QUICK.aiHint.conf === Math.round(Math.max(base, Math.min(T.accCap, base + 0.05)) * 100), 'accuracy bonus not applied');
+    QUICK = null;
+    // tot teritoriul: plafoane
+    terrGrowContiguous(100);
+    h = territoryHelp();
+    assert(h.sectors === 49 && h.crPct === T.crPctCap && h.fullDistricts === TERR_DISTRICTS.length && h.next === null, 'full map');
+    assert(h.fiftyExtra === T.district.fiftyCap && h.dtPct === TERR_DISTRICTS.length * T.district.dtPct, 'district bonuses');
+    S.player.math = S.player.trivia = 1e9;
+    startQuickGame('quick', 0, '2026-10-13');
+    assert(QUICK.fiftyLeft === Q.fiftyUses + T.district.fiftyCap, 'district 50/50 not applied');
+    quickAskAI(QUICK);
+    assert(QUICK.aiHint.conf <= Math.round(T.accCap * 100), 'accuracy over cap: ' + QUICK.aiHint.conf);
+    QUICK = null;
+  });
+
+  test('Old saves: bought land becomes contiguous sectors, stands keep working', () => {
+    fresh(204);
+    const T = CONFIG.TERRITORY;
+    const mk = (land, stands) => { const o = JSON.parse(serialize(S)); delete o.territory; delete o.duel; o.player.land = land; o.stands = stands || []; return o; };
+    let m = migrate(mk(1000)); S = m;
+    assert(territoryCount() === Math.ceil((1000 - T.baseSU) / T.suPerSector) && S.player.land === 1000, 'land 1000 -> ' + territoryCount());
+    // toate sectoarele sunt legate de bază
+    const seen = new Set([T.home]), q = [T.home];
+    while (q.length) { const i = q.pop(); for (const j of terrNeighbors(i)) if (isPlayerSector(j) && !seen.has(j)) { seen.add(j); q.push(j); } }
+    assert(seen.size === territoryCount(), 'migrated sectors are not contiguous');
+    assert(S.duel && S.duel.wins === 0 && S.duel.attacks.length === 0, 'duel state missing');
+    S = migrate(mk(20)); assert(territoryCount() === 1, 'small land should give the home sector');
+    S = migrate(mk(1e6)); assert(territoryCount() === terrMap().length, 'huge land capped at the map');
+    // standurile existente încap întotdeauna
+    const st = [{ id: 's1', tier: 4 }, { id: 's2', tier: 4 }, { id: 's3', tier: 3 }];
+    S = migrate(mk(300, st));
+    assert(landUsed() <= S.player.land && landFree() >= 0, 'stands no longer fit: ' + landUsed() + ' > ' + S.player.land);
+    const rt = serialize(S);
+    assert(serialize(migrate(deserialize(rt))) === rt, 'migrated save changed on reload');
+    invariants('migrated territory');
+  });
+
+  test('Land capacity is derived from territory; land is no longer bought', () => {
+    fresh(205);
+    const T = CONFIG.TERRITORY;
+    assert(typeof actBuyLand === 'undefined' && typeof actExplore === 'undefined', 'old land actions still exist');
+    assert(S.player.land === T.baseSU + T.suPerSector, 'start land ' + S.player.land);
+    terrGrowContiguous(18);
+    assert(S.player.land === 1000 && landFree() === 1000, 'land after 19 sectors');
+    S.player.league = 4; S.player.cr = 1e7;
+    assert(whyBuildMarketStand() === '', 'market stand should fit on 19 sectors: ' + whyBuildMarketStand());
+    assert(!serverFrozen() && landPrice() === CONFIG.LAND.basePrice, 'global server mechanic still active');
+    // lumea boților se mișcă, dar nu îți ia sectoarele fără atac
+    const before = S.territory.owner.slice(), mine = territoryCount();
+    S.duel.nextAttackAt = 1e15;
+    simulate(6 * CONFIG.HOUR);
+    assert(territoryCount() === mine, 'bots took player sectors');
+    assert(S.territory.owner.some((o, i) => o !== before[i]), 'bot world did not move');
+    invariants('derived land');
   });
 
   // ---------- Quiz Rapid, Supraviețuire, deblocare ----------
@@ -542,6 +688,8 @@ function runSelfTests(opts) {
     actClaimDaily(day);
     assert(nextStep(day).id === 'firstQuick', 'first quick second');
     startQuickGame('quick', 0, day); let t = 0; while (!QUICK.done) t = quickStep(t, true); QUICK = null;
+    assert(nextStep(day).id === 'firstSector', 'first sector after the first game');
+    S.duel.captures = 1;
     S.player.dt = 20;
     assert(nextStep(day).id === 'train', 'train with DT');
     S.player.dt = 0; S.inv = []; S.equipped = [];
@@ -553,8 +701,157 @@ function runSelfTests(opts) {
     S.unlock.fresh = 'market';
     assert(nextStep(day).id === 'fresh', 'fresh feature');
     S.unlock.fresh = null;
+    assert(nextStep(day).id === 'tf', 'try true/false');
+    count('tfPlayed');
+    assert(nextStep(day).id === 'expand', 'expand territory');
+    for (const c of terrMap()) S.territory.cd[c.i] = S.time + 1e9;
     assert(nextStep(day).id === 'survival', 'fallback survival');
   });
+
+  // ============================================================
+  // ADEVĂRAT SAU FALS + TOP REALIZĂRI UMANE (js/tf.js, js/top.js)
+  // ============================================================
+  const savedTF = TFG;
+  test('Adevărat sau Fals: statements are valid (boolean, explained, no duplicates)', () => {
+    const cats = ['România', 'Geografie', 'Istorie', 'Știință', 'Natură', 'Sport', 'Cultură'];
+    for (const r of TF_RAW) {
+      assert(cats.includes(r[0]), 'unknown category ' + r[0]);
+      assert(r[1] >= 1 && r[1] <= 3, 'bad difficulty: ' + r[2]);
+      assert(typeof r[2] === 'string' && r[2].length > 8, 'empty statement');
+      assert(r[3] === 0 || r[3] === 1, 'answer is not 0/1: ' + r[2]);
+      if (r[3] === 0) assert(typeof r[4] === 'string' && r[4].length > 5, 'false statement without explanation: ' + r[2]);
+      assert(!/[şţŞŢ]/.test(r[2] + (r[4] || '')), 'cedilla instead of comma-below diacritic: ' + r[2]);
+    }
+    const all = tfAll();
+    for (const s of all) {
+      assert(s.answer === true || s.answer === false, 'answer not boolean: ' + s.text);
+      if (!s.answer) assert(s.expl, 'false statement without explanation: ' + s.text);
+    }
+    assert(new Set(all.map(s => s.id)).size === all.length, 'duplicate statement ids');
+    assert(new Set(TF_STATEMENTS.map(s => s.text.toLowerCase())).size === TF_STATEMENTS.length, 'duplicate statement text');
+    const ro = TF_STATEMENTS.filter(s => s.cat === 'România').length, tr = TF_STATEMENTS.filter(s => s.answer).length / TF_STATEMENTS.length;
+    assert(TF_STATEMENTS.length >= 300 && ro >= 100, `too few statements (${TF_STATEMENTS.length}, România ${ro})`);
+    assert(tr > 0.4 && tr < 0.6, 'true/false ratio ' + tr.toFixed(2));
+    assert(TF_BANK.length > 100 && TF_BANK.every(s => s.q && s.a), 'bank statements missing');
+    return `${TF_STATEMENTS.length} scrise + ${TF_BANK.length} din bancă, România ${ro}`;
+  });
+
+  test('Adevărat sau Fals: scoring, streak multiplier, −3 s penalty, rewards', () => {
+    fresh(301); QUICK = null; TFG = null;
+    const T = CONFIG.TF, day = '2026-10-10';
+    assert(tfComboMult(0) === T.combo[0] && tfComboMult(T.comboEvery) === T.combo[1] && tfComboMult(999) === T.combo[T.combo.length - 1], 'combo steps');
+    const cr0 = S.player.cr, g0 = gamesPlayed();
+    assert(startTF(0, day).ok, 'start failed');
+    assert(!startTF(0, day).ok && !startQuickGame('quick', 0, day).ok, 'second game allowed during a sprint');
+    assert(quickDay(day).used === 1, 'sprint not counted for the daily limit');
+    const m = TFG;
+    let t = 100, pts = 0, cr = 0;
+    for (let i = 0; i < 8; i++) {
+      pts += Math.round(T.pointsBase * tfComboMult(m.streak));
+      cr += tfCRFor(m.streak, m.league, m.full);
+      assert(tfAnswer(m, m.st.answer, t).ok, 'answer rejected'); t += 500;
+    }
+    assert(m.score === pts && m.cr === cr && m.streak === 8 && m.correct === 8, 'score/streak wrong');
+    const endBefore = m.endAt, leftBefore = tfTimeLeft(m, t);
+    tfAnswer(m, !m.st.answer, t);
+    assert(m.streak === 0 && m.phase === 'feedback' && m.last && !m.last.right, 'wrong answer not handled');
+    assert(m.endAt === endBefore - T.penaltyMs + T.explainMs, 'penalty not applied');
+    assert(tfTimeLeft(m, t) === leftBefore - T.penaltyMs && tfTimeLeft(m, t + 500) === tfTimeLeft(m, t), 'clock should pause during the explanation');
+    assert(!tfAnswer(m, true, t + 10).ok, 'answer accepted during the explanation');
+    tfUpdate(t + T.explainMs);
+    assert(m.phase === 'question' && tfTimeLeft(m, t + T.explainMs) === leftBefore - T.penaltyMs, 'did not resume after the explanation');
+    tfUpdate(m.endAt);
+    assert(m.done && m.result, 'sprint did not end when the time ran out');
+    const r = m.result;
+    assert(r.correct === 8 && r.answered === 9 && r.penalties === 1 && r.bestStreak === 8, 'result counts wrong');
+    assert(r.cr === cr && S.player.cr >= cr0 + cr && r.dt === Math.floor(8 * T.dtPerCorrect), 'rewards wrong');
+    assert(S.tf.best === pts && r.firstBest && !r.record && S.tf.played === 1 && counter('tfCorrect') === 8, 'record not stored');
+    assert(gamesPlayed() === g0 + 1, 'sprint not counted for unlocks');
+    // timp expirat chiar din penalizare
+    TFG = null; startTF(0, day);
+    TFG.endAt = 1000;
+    tfAnswer(TFG, !TFG.st.answer, 500);
+    tfUpdate(500 + T.explainMs);
+    assert(TFG.done && TFG.result.answered === 1, 'penalty past zero should end the sprint');
+    // abandonat fără răspuns: nu consumă limita zilnică
+    TFG = null; startTF(0, '2026-10-11'); finishTF(TFG, true);
+    assert(quickDay('2026-10-11').used === 0 && S.tf.played === 2, 'empty abandoned sprint consumed the daily limit');
+    TFG = null;
+    invariants('tf');
+  });
+
+  test('Adevărat sau Fals: recently seen statements are not repeated', () => {
+    fresh(302); TFG = null;
+    const N = CONFIG.TF.recentMemory, seen = [];
+    let m = null;
+    for (let i = 0; i < 700; i++) {
+      if (i % 35 === 0) m = { used: new Set(), answered: 0 };
+      seen.push(tfPick(m).id); m.answered++;
+    }
+    const lastAt = {};
+    seen.forEach((id, i) => { assert(lastAt[id] === undefined || i - lastAt[id] > N, `statement repeated after ${i - lastAt[id]} picks`); lastAt[id] = i; });
+    assert(S.tf.recent.length === N, 'recent memory size ' + S.tf.recent.length);
+    const back = migrate(deserialize(serialize(S)));
+    assert(back.tf && back.tf.recent.length === N && back.tf.recent[N - 1] === seen[seen.length - 1], 'recent memory not kept in the save');
+    const st = TF_STATEMENTS.filter(s => s.answer).length;
+    let yes = 0; m = { used: new Set(), answered: 0 };
+    for (let i = 0; i < 300; i++) if (tfPick(m).answer) yes++;
+    assert(yes > 110 && yes < 190, `picks are not ~50/50 true/false (${yes}/300, bank has ${st} true)`);
+  });
+
+  test('Adevărat sau Fals: AI hint scales with the trivia stat', () => {
+    fresh(303);
+    assert(tfPetHelpBonus() === 0, 'help bonus should default to 0');
+    S.player.trivia = CONFIG.START.trivia;
+    assert(tfHintChance() === 0, 'weak AI should not give hints');
+    S.player.trivia = CONFIG.TF.petHint.fullStat;
+    assert(Math.abs(tfHintChance() - CONFIG.TF.petHint.maxChance) < 1e-9, 'max hint chance');
+    S.player.trivia = 1e6;
+    const st = TF_STATEMENTS[0];
+    let n = 0, right = 0;
+    for (let i = 0; i < 2000; i++) { const h = tfMakeHint(st); if (h) { n++; if (h.right) right++; assert(h.say === (h.right ? st.answer : !st.answer) && h.conf >= 50 && h.conf <= 100, 'bad hint'); } }
+    assert(n > 400 && n < 1000, 'hint frequency ' + n);
+    assert(right / n > 0.85, 'strong AI hints should be mostly right');
+  });
+
+  test('Top realizări umane: ranking order, player rank, safe accessors', () => {
+    fresh(304);
+    for (const c of TOP_CATS) {
+      const rows = topRanking(c.id);
+      assert(rows.length === S.bots.length + 1 && rows.filter(r => r.isPlayer).length === 1, 'rows ' + c.id);
+      for (let i = 1; i < rows.length; i++) assert(rows[i - 1].value >= rows[i].value && rows[i].rank === i + 1, 'not sorted: ' + c.id);
+      const me = rows.find(r => r.isPlayer);
+      assert(me.rank === 1 + rows.filter(r => !r.isPlayer && r.value > me.value).length, 'player rank wrong: ' + c.id);
+      assert(JSON.stringify(topRanking(c.id)) === JSON.stringify(rows), 'bot values not deterministic: ' + c.id);
+    }
+    S.quick.survBest = 0;
+    assert(topRanking('surv').find(r => r.isPlayer).rank === S.bots.length + 1, 'player with 0 should be last');
+    const v = topView('surv', 20);
+    assert(v.rows.length === 20 && v.outside && v.me.isPlayer && v.me.rank === S.bots.length + 1, 'view should show the player outside the top');
+    S.quick.survBest = 1000;
+    assert(topRanking('surv')[0].isPlayer && !topView('surv', 20).outside, 'record 1000 should be first');
+    const third = topRanking('quick')[2];
+    S.quick.best = third.value;
+    assert(topRanking('quick').find(r => r.isPlayer).rank === 3, 'a tie should rank the player first');
+    const before = topRanking('correct').filter(r => !r.isPlayer).map(r => r.name + ':' + r.value);
+    const map0 = {}; for (const b of S.bots) map0[b.name] = topBotValue(b, topCat('correct'));
+    S.time += 20 * CONFIG.DAY;
+    assert(S.bots.every(b => topBotValue(b, topCat('correct')) >= map0[b.name]), 'bot totals should grow over time');
+    assert(S.bots.some(b => topBotValue(b, topCat('correct')) > map0[b.name]), 'bot totals did not grow');
+    assert(before.length === S.bots.length, 'bots');
+    const duel = S.duel, terr = S.territory;
+    delete S.duel; delete S.territory;
+    assert(topDuelWins() === 0 && topTerritory() === 0, 'accessors should be 0 without duels/territory');
+    assert(topRanking('duels').length === S.bots.length + 1 && topRanking('territory').length === S.bots.length + 1, 'ranking without territory');
+    S.duel = duel; S.territory = terr;
+    if (S.duel) { S.duel.wins = 99999; assert(topRanking('duels')[0].isPlayer, 'duel wins not read'); }
+    S.tf = { played: 1, best: 50000, bestCorrect: 1, bestStreak: 1, correct: 1, answered: 1, recent: [] };
+    assert(topRanking('tf')[0].isPlayer && topRecords().tf === 50000, 'TF record not read');
+    count('quickCorrect', 7); count('tfCorrect', 5); count('overrideOk', 1);
+    assert(topHumanCorrect() === 13, 'human correct total');
+    assert(TOP_CLOUD.rows('surv').length === 0 && !TOP_CLOUD.on(), 'offline top should not have cloud rows');
+  });
+  TFG = savedTF;
 
   QUICK = null;
   return results;

@@ -85,23 +85,14 @@ function setPetState(state, ms) {
 // TOP BAR
 // ============================================================
 function htmlTop() {
-  const p = S.player, sv = S.server, used = usedSpace(), ratio = used / sv.total, L = CONFIG.LEAGUES[p.league];
-  const crit = sv.state === 'CRITICAL';
-  const showNet = isUnlocked('land'), showLand = isUnlocked('stands') || showNet, showLeague = isUnlocked('multi');
+  const p = S.player, L = CONFIG.LEAGUES[p.league];
+  const showLand = isUnlocked('stands'), showLeague = isUnlocked('multi');
   return `<div class="logo" data-act="logoTap">CYBER<span>NET</span><small>AI ACADEMY</small></div>
-  ${showNet ? `<div class="netbar">
-    <span class="dim">REȚEA GLOBALĂ</span>
-    <div class="meter" title="Folosit ${fmt(used)} / ${fmt(sv.total)} SU"><i class="${ratio > 0.45 ? 'hot' : ''}" style="width:${(ratio * 100).toFixed(1)}%"></i><span class="mark" style="left:${CONFIG.SERVER.criticalRatio * 100}%"></span></div>
-    <span>${fmt(used)}/${fmt(sv.total)} SU</span>
-    <span class="dim">liber <b class="${ratio > 0.45 ? 'warn' : 'good'}">${fmtPct((1 - ratio) * 100)}</b></span>
-    <span class="dim">teren <b class="cr">${landPrice()}</b> CR/SU</span>
-    <span class="dim">extinderi <b>${sv.expansions}</b></span>
-    <span class="state ${crit ? 'crit blink' : 'ok'}">${crit ? 'CRITIC' : 'NORMAL'}</span>
-  </div>` : '<div class="netbar"></div>'}
+  <div class="netbar"></div>
   <div class="wallet">
     <span class="pill cr" title="Credite">${ic('cr')}<b>${fmt(p.cr)}</b></span>
     <span class="pill dtc" title="Tokeni de date">${ic('dt')}<b>${p.dt}</b><span class="dim tiny">/${CONFIG.DT.stockCap}</span></span>
-    ${showLand ? `<span class="pill landc" title="Terenul tău: liber / deținut">${ic('land')}<b>${fmt(landFree())}</b><span class="dim tiny">/${fmt(p.land)}</span></span>` : ''}
+    ${showLand ? `<span class="pill landc" title="Teren liber / total (vine din sectoarele din Teritoriu)">${ic('land')}<b>${fmt(landFree())}</b><span class="dim tiny">/${fmt(p.land)}</span></span>` : ''}
     <span class="pill shardc" title="Fragmente">${ic('shard')}<b>${fmt(p.shards)}</b></span>
     ${showLeague ? `<span class="pill league-pill" style="color:${L.color};border-color:${L.color}" title="Ligă și rating">${ic('rating')}${L.name} <span class="dim">${p.rating}</span></span>` : ''}
     ${CLOUD.enabled() ? `<button class="pill acct-pill ${CLOUD.loggedIn() ? (CLOUD.status === 'conflict' || CLOUD.status === 'error' ? 'warn' : 'good') : ''}" data-act="openAccount" title="Cont cloud">☁ ${CLOUD.loggedIn() ? esc(CLOUD.acct.user) + (CLOUD.status === 'conflict' ? ' !' : '') : 'Conectare'}</button>` : ''}
@@ -109,11 +100,8 @@ function htmlTop() {
   </div>`;
 }
 function htmlCritical() {
-  const sv = S.server;
-  if (sv.state !== 'CRITICAL' || UI.critDismissed || !isUnlocked('land')) return '';
-  return `<span class="dot blink"></span><span>CAPACITATE SERVER CRITICĂ — infrastructura grea este înghețată ${cd(sv.freezeUntil)} — spațiul global se va extinde cu +50%</span><button class="iconbtn right" style="width:30px;height:30px" data-act="dismissCrit" aria-label="Închide">✕</button>`;
+  return ''; // serverul global (criză / înghețare / extindere) a fost scos; atacurile pe teritoriu apar în „Următorul pas”
 }
-
 // ============================================================
 // LEFT — AI Training Bay
 // ============================================================
@@ -191,10 +179,10 @@ const RIGHT_FEATURE = { cards: null, album: 'album', guild: 'guild' };
 // CENTER — tabs
 // ============================================================
 function htmlCenter() {
-  const tabs = [['arena', 'Arenă', 'arena'], ['ai', 'Laborator AI', 'ai'], ['market', 'Piață', 'market'], ['land', 'Teren', 'land'], ['season', 'Sezon', 'season']];
+  const tabs = [['arena', 'Arenă', 'arena'], ['ai', 'Laborator AI', 'ai'], ['market', 'Piață', 'market'], ['land', 'Teritoriu', 'land'], ['season', 'Sezon', 'season']];
   if (CENTER_FEATURE[UI.centerTab] && !isUnlocked(CENTER_FEATURE[UI.centerTab])) UI.centerTab = 'arena';
   const unclaimed = S.missions.list.filter(m => m.progress >= m.target && !m.claimed).length;
-  const t = tabs.map(([id, label, icn]) => tabBtn('center', id, label, icn, CENTER_FEATURE[id], `${id === 'season' && unclaimed ? ` <span class="badge-n">${unclaimed}</span>` : ''}${id === 'arena' && arenaBusy() ? ' <span class="dot blink" style="width:7px;height:7px"></span>' : ''}${id === 'ai' && S.ai.energy > 0 ? ` <span class="badge-n">${S.ai.energy}</span>` : ''}${id === 'arena' && !dailyInfo(todayStr()).claimed ? ' <span class="badge-n">!</span>' : ''}`)).join('');
+  const t = tabs.map(([id, label, icn]) => tabBtn('center', id, label, icn, CENTER_FEATURE[id], `${id === 'season' && unclaimed ? ` <span class="badge-n">${unclaimed}</span>` : ''}${id === 'arena' && arenaBusy() ? ' <span class="dot blink" style="width:7px;height:7px"></span>' : ''}${id === 'ai' && S.ai.energy > 0 ? ` <span class="badge-n">${S.ai.energy}</span>` : ''}${id === 'arena' && !dailyInfo(todayStr()).claimed ? ' <span class="badge-n">!</span>' : ''}${id === 'land' && S.duel && S.duel.attacks.length ? ' <span class="badge-n atk">⚠</span>' : ''}`)).join('');
   let body = '';
   if (UI.centerTab === 'arena') body = htmlArena();
   else if (UI.centerTab === 'ai') body = htmlAILab();
@@ -233,6 +221,7 @@ function htmlArena() {
   <div class="card ${dly.claimed ? '' : 'hl'}" style="margin-top:10px">${daily}</div>
   ${rescue}
   <div class="cards" style="margin-top:10px">${solo}${multi}</div>
+  ${typeof htmlTopCard === 'function' ? htmlTopCard() : ''}
   ${practice}
   ${multiOn ? `<div class="card league-card" style="margin-top:10px"><div class="league-emblem" style="color:${L.color};border-color:${L.color}">${L.name[0]}</div>
     <div class="grow"><div class="row between"><b style="color:${L.color}">LIGA ${L.name.toUpperCase()}</b><span>Rating <b>${p.rating}</b></span></div>
@@ -245,14 +234,16 @@ function htmlArena() {
 // ---------- „Următorul pas” + butoanele mari de joc ----------
 function htmlNextStep() {
   const n = nextStep();
-  return `<div class="nextstep"><span class="ns-label">URMĂTORUL PAS</span><span class="ns-text">${esc(n.text)}</span>${btn(n.label, n.act === 'equip' ? 'nsEquip' : n.act, n.args, n.why || '', 'primary sm ns-btn')}</div>`;
+  return `<div class="nextstep${n.urgent ? ' urgent' : ''}"><span class="ns-label">${n.urgent ? 'URGENT' : 'URMĂTORUL PAS'}</span><span class="ns-text">${esc(n.text)}</span>${btn(n.label, n.act === 'equip' ? 'nsEquip' : n.act, n.args, n.why || '', (n.urgent ? 'danger' : 'primary') + ' sm ns-btn')}</div>`;
 }
 function htmlPlayHero() {
   const why = whyQuick(), d = quickDay(), sq = S.quick;
   const a = why ? ` data-reason="${esc(why)}" title="${esc(why)}" aria-disabled="true"` : '';
-  return `<div class="hero">
+  const tfBtn = typeof htmlTFHeroBtn === 'function' ? htmlTFHeroBtn(why) : '';
+  return `<div class="hero ${tfBtn ? 'has-tf' : ''}">
     <button type="button" class="btn hero-play ${why ? 'is-disabled' : ''}" data-act="startQuick"${a}><span>▶ Joacă acum — Quiz Rapid</span><small>${CONFIG.QUICK.questions} întrebări · tu răspunzi · combo până la ×${CONFIG.QUICK.combo[CONFIG.QUICK.combo.length - 1]}</small></button>
     <button type="button" class="btn hero-surv ${why ? 'is-disabled' : ''}" data-act="startSurvival"${a}><span>♥ Supraviețuire</span><small>${sq.survBest ? 'Record: ' + sq.survBest : '3 vieți · tot mai greu'}</small></button>
+    ${tfBtn}
   </div>
   <div class="hero-sub tiny"><span class="${d.full ? 'dim' : 'warn'}">Jocuri cu recompensă întreagă azi: <b>${d.used}/${d.limit}</b>${d.full ? '' : ' — acum primești 25%'}</span>${sq.best ? `<span class="dim">Record Quiz Rapid: <b class="good">${fmt(sq.best)}</b></span>` : ''}</div>`;
 }
@@ -385,51 +376,7 @@ function listingRow(l) {
     <div class="col" style="align-items:flex-end;gap:4px"><span class="price">${fmt(l.price)}</span><span class="deal ${d <= 0 ? 'good' : d > 15 ? 'bad' : 'warn'}">${d > 0 ? '+' : ''}${d}% față de corect</span>${btn('Cumpără', 'buyListing', l.id, whyBuyListing(l.id), 'sm primary')}</div></div>`;
 }
 
-// ---------- land ----------
-let landCache = { sig: '', html: '' };
-function htmlLand() {
-  const sv = S.server, used = usedSpace(), gl = S.guilds.reduce((s, g) => s + g.land, 0);
-  const sig = [sv.total, Math.round(sv.botLand / 50), S.player.land, gl].join(':');
-  if (landCache.sig !== sig) {
-    landCache.sig = sig;
-    landCache.html = Art.landMap([
-      { value: S.player.land, color: getCss('--c'), min: 1 },
-      { value: gl, color: getCss('--b'), min: 1 },
-      { value: sv.botLand, color: '#35506e' },
-    ], sv.total);
-  }
-  const plots = CONFIG.LAND.plots.map(n => btn(`+${fmt(n)} SU<span class="cost">${fmt(n * landPrice())} CR</span>`, 'buyLand', n, whyBuyLand(n), 'block')).join('');
-  const hist = sv.history.map((h, i) => [h.t / CONFIG.HOUR, h.total]);
-  const hu = sv.history.map(h => [h.t / CONFIG.HOUR, h.used]);
-  return `<div class="cards">
-    <div class="card"><h3>${ic('land')} Server global</h3><div class="kv"><span>Spațiu total</span><b>${fmt(sv.total)} SU</b><span>Folosit</span><b>${fmt(used)} SU (${fmtPct(used / sv.total * 100)})</b><span>Liber</span><b class="${used / sv.total > 0.45 ? 'warn' : 'good'}">${fmt(sv.total - used)} SU</b><span>Preț</span><b class="cr">${landPrice()} CR / SU</b><span>Extinderi</span><b>${sv.expansions}</b><span>Stare</span><b class="${sv.state === 'CRITICAL' ? 'bad' : 'good'}">${serverStateRo(sv.state)}${sv.state === 'CRITICAL' ? ' · ' + cd(sv.freezeUntil) : ''}</b></div>
-      <div class="tiny dim" style="margin-top:6px">Când spațiul liber scade sub 50%, achizițiile grele (stand x6+, Sediul breslei, standuri de piață, parcele peste ${CONFIG.LAND.heavyPlot} SU) se blochează ${CONFIG.SERVER.freezeMs / 1000} s, apoi capacitatea crește cu 50%. Preț = ${CONFIG.LAND.basePrice} × (1 + 3 × folosit²).</div></div>
-    <div class="card"><h3>Terenul tău</h3><div class="kv"><span>Deținut</span><b class="landc">${fmt(S.player.land)} SU</b><span>Standuri de antrenament</span><b>${fmt(S.stands.reduce((s, x) => s + CONFIG.STAND_TIERS[x.tier].land, 0))} SU</b><span>Stand de piață</span><b>${S.market.stand ? fmt(CONFIG.MARKET.standLand) : 0} SU</b><span>Liber pentru construcții</span><b class="good">${fmt(landFree())} SU</b></div>
-      <h4 style="margin-top:10px">Cumpără o parcelă</h4><div class="plot-grid">${plots}</div></div>
-  </div>
-  ${htmlTerritory()}
-  <div class="card" style="margin-top:10px"><h4>Harta ciberspațiului</h4>${landCache.html}
-    <div class="legend"><span><i style="background:var(--c)"></i>Tu</span><span><i style="background:var(--b)"></i>Bresle</span><span><i style="background:#35506e"></i>Alți jucători</span><span><i style="background:#132033"></i>Liber</span></div></div>
-  <div class="card" style="margin-top:10px"><h4>Spațiu total vs folosit (ore de joc)</h4>${Art.lineChart([{ points: hist, color: getCss('--b') }, { points: hu, color: getCss('--warn'), fill: true }], { h: 120, zero: true })}
-    <div class="legend"><span><i style="background:var(--b)"></i>Total</span><span><i style="background:var(--warn)"></i>Folosit</span></div></div>`;
-}
-const TILE_ICON = { d: ['dt', 'var(--dt)'], c: ['cr', 'var(--cr)'], s: ['shard', 'var(--shard)'], n: ['nft', 'var(--c)'], j: ['cr', 'var(--warn)'] };
-function htmlTerritory() {
-  const n = tileCount(), ex = tilesExplored(), E = CONFIG.EXPLORE;
-  const pages = Math.max(1, Math.ceil(n / E.pageSize));
-  UI.tilePage = clamp(UI.tilePage || 0, 0, pages - 1);
-  const from = UI.tilePage * E.pageSize, to = Math.min(n, from + E.pageSize);
-  let tiles = '';
-  for (let i = from; i < to; i++) {
-    const k = S.player.tiles[i];
-    if (k) { const [icn, col] = TILE_ICON[k] || TILE_ICON.d; tiles += `<div class="tile done ${k === 'j' || k === 'n' ? 'rare' : ''}" style="color:${col}" title="Sectorul #${i + 1} explorat">${ic(icn, 14)}</div>`; }
-    else tiles += `<button class="tile fog" data-act="explore" data-args="${i}" title="Explorează sectorul #${i + 1}">?</button>`;
-  }
-  const pager = pages > 1 ? `<div class="row" style="margin-top:8px">${Array.from({ length: pages }, (_, p) => `<button class="chip ${p === UI.tilePage ? 'on' : ''}" data-act="tilePage" data-args="${p}">${p * E.pageSize + 1}-${Math.min(n, (p + 1) * E.pageSize)}</button>`).join('')}</div>` : '';
-  return `<div class="card" style="margin-top:10px"><div class="row between"><h3 style="margin:0">${ic('land')} Teritoriul tău</h3><span class="small">${ex}/${n} explorate</span></div>
-    <div class="tiny dim" style="margin:4px 0 8px">Fiecare ${E.tileSU} SU deținute formează un sector. Atinge un sector <b style="color:var(--a)">?</b> ca să-l explorezi o singură dată: DT, CR, fragmente, o carte rară sau un jackpot de CR. Cumpără mai mult teren pentru sectoare noi.</div>
-    ${n ? `<div class="tiles">${tiles}</div>${pager}<div class="row" style="margin-top:8px">${btn('Explorează tot', 'exploreAll', undefined, ex >= n ? 'Nimic de explorat – cumpără mai mult teren' : '', 'sm accent')}</div>` : `<div class="empty">Deții mai puțin de ${E.tileSU} SU. Cumpără o parcelă ca să primești sectoare.</div>`}</div>`;
-}
+// ---------- teritoriu: htmlLand() este în js/terr_ui.js ----------
 function getCss(v) { try { return getComputedStyle(document.body).getPropertyValue(v).trim() || '#39ff88'; } catch (e) { return '#39ff88'; } }
 
 // ---------- season ----------
@@ -773,7 +720,6 @@ const HANDLERS = {
     if (res && res.ok) { setPetState('training', 1200); toast(res.msg); }
   },
   buyDT(n) { doAct(() => actBuyDT(n)); },
-  buyLand(n) { doAct(() => actBuyLand(n)); },
   buildStand() { doAct(() => actBuildStand()); },
   upgradeStand(id) { doAct(() => actUpgradeStand(id)); },
   demolishStand(id) {
@@ -884,12 +830,6 @@ const HANDLERS = {
   upgradeHQ() { doAct(() => actUpgradeHQ()); },
   buyCosmetic(id) { doAct(() => actBuyCosmetic(id)); },
   useCosmetic(id) { doAct(() => actUseCosmetic(id)); UI.lastHtml = {}; Art.clear(); },
-  explore(i) {
-    const r = doAct(() => actExplore(i), true);
-    if (r && r.ok) toast('Sectorul #' + (i + 1) + ': ' + r.msg, r.kind === 'nft' || r.kind === 'jackpot' ? 'warn' : '');
-  },
-  exploreAll() { doAct(() => actExploreAll()); },
-  tilePage(p) { UI.tilePage = p; },
   claimMission(i) { doAct(() => actClaimMission(i)); },
   rebirth() {
     confirmBox('Renaștere neurală?', `Statisticile AI-ului, standurile și ratingul se resetează. Primești <b class="good">+${legacyGain()} Moștenire</b> (bonus permanent). Cărțile, terenul, CR, breasla și cosmeticele se păstrează.`, 'Renaște', () => doAct(() => actRebirth()), true);
@@ -919,7 +859,7 @@ const HANDLERS = {
   dbgSpeed(x) { UI.speed = x; openDebug(); },
   dbgAdd(k) {
     const p = S.player;
-    if (k === 'cr') addCR(100000, 'debug'); if (k === 'dt') p.dt += 100; if (k === 'land') p.land += 1000; if (k === 'shards') addShards(500);
+    if (k === 'cr') addCR(100000, 'debug'); if (k === 'dt') p.dt += 100; if (k === 'land') { terrDebugGrant(5); toast('+5 sectoare'); } if (k === 'attack') { const r = terrDebugAttack(); toast(r.msg, r.ok ? 'warn' : 'err'); } if (k === 'shards') addShards(500);
     if (k === 'nft') for (const t of CONFIG.CARDS.types) giveCard(mintCard({ type: t.id, rarity: 2 }), 'debug');
     if (k === 'nftrand') for (let i = 0; i < 10; i++) giveCard(mintCard({}), 'debug');
     if (k === 'unique') giveCard(mintCard({ rarity: CONFIG.CARDS.UNIQUE }), 'debug');
@@ -927,7 +867,6 @@ const HANDLERS = {
     if (k === 'recal') p.recal += 5;
     if (k === 'live') { if (typeof LiveQuiz !== 'undefined') LiveQuiz.refresh(true).then(() => toast('Quiz live: ' + nRo(LiveQuiz.pool.length, 'întrebare', 'întrebări'))); }
     if (k === 'rating') { p.rating += 100; updatePlayerLeague(); }
-    if (k === 'crit') { S.server.botLand = Math.max(S.server.botLand, Math.ceil(S.server.total * 0.51) - (usedSpace() - S.server.botLand)); checkServerCapacity(); }
     if (k === 'season') { S.season.start = S.time - CONFIG.SEASON.lengthMs; }
     if (k === 'hour') simulate(CONFIG.HOUR);
     if (k === 'stamina') p.stamina = CONFIG.SOLO.staminaMax;
@@ -975,16 +914,17 @@ Object.assign(HANDLERS, {
 const OPT_KEYS = ['A', 'B', 'C', 'D'];
 function htmlQuickGame(m) {
   const Q = CONFIG.QUICK, surv = m.mode === 'survival';
-  const title = surv ? '♥ Supraviețuire' : '▶ Quiz Rapid';
-  const head = `<div class="modal-head"><h2>${title}</h2><button class="iconbtn" data-act="quickQuit" aria-label="${m.done ? 'Închide' : 'Renunță'}" title="${m.done ? 'Închide' : 'Renunță (păstrezi recompensele de până acum)'}">✕</button></div>`;
-  if (m.done) return head + htmlQuickEnd(m);
+  const duel = m.mode === 'duel' && typeof htmlDuelBits === 'function' ? htmlDuelBits(m) : null;
+  const title = duel ? duel.title : surv ? '♥ Supraviețuire' : '▶ Quiz Rapid';
+  const head = `<div class="modal-head"><h2>${title}</h2><button class="iconbtn" data-act="quickQuit" aria-label="${m.done ? 'Închide' : 'Renunță'}" title="${m.done ? 'Închide' : duel ? 'Renunță (pierzi duelul)' : 'Renunță (păstrezi recompensele de până acum)'}">✕</button></div>`;
+  if (m.done) return head + (duel ? htmlDuelEnd(m) : htmlQuickEnd(m));
   const q = m.q, reveal = m.phase === 'reveal', last = m.last;
   const mult = quickComboMult(m.streak);
   const left = surv
     ? `<div><span class="hearts">${'♥'.repeat(Math.max(0, m.lives))}<span class="mute">${'♥'.repeat(Math.max(0, Q.survival.lives - m.lives))}</span></span><div class="tiny dim">Nivel ${q.level}/10 · corecte ${m.correct}${S.quick.survBest ? ' · record ' + S.quick.survBest : ''}</div></div>`
     : `<div><div class="tiny dim qlabel">ÎNTREBAREA</div><b class="qnum">${Math.min(m.i + (reveal ? 0 : 1), m.n)}</b><span class="dim">/${m.n}</span><div class="qdots">${Array.from({ length: m.n }, (_, i) => `<i class="${i < m.answered ? (m.hist[i] ? 'ok' : 'bad') : i === m.answered ? 'cur' : ''}"></i>`).join('')}</div></div>`;
-  const combo = `<div class="qcombo ${mult > 1 ? 'on' : ''} ${reveal && last && last.comboUp ? 'bump' : ''}">×${String(mult).replace('.', ',')}<small>COMBO</small></div>`;
-  const right = `<div class="qscore"><b>${fmt(m.score)}</b> <span class="tiny dim">puncte</span><div class="cr small">+${fmt(m.cr)} CR</div></div>`;
+  const combo = duel ? duel.vs : `<div class="qcombo ${mult > 1 ? 'on' : ''} ${reveal && last && last.comboUp ? 'bump' : ''}">×${String(mult).replace('.', ',')}<small>COMBO</small></div>`;
+  const right = duel ? duel.opp : `<div class="qscore"><b>${fmt(m.score)}</b> <span class="tiny dim">puncte</span><div class="cr small">+${fmt(m.cr)} CR</div></div>`;
   const opts = q.options.map((o, i) => {
     let cls = 'opt qopt';
     const removed = m.removed.includes(o);
@@ -1001,7 +941,9 @@ function htmlQuickGame(m) {
   }).join('');
   let fb = '';
   if (reveal && last) {
-    if (last.right) fb = `<span class="good">✓ Corect! +${fmt(last.cr)} CR · +${last.pts} puncte${last.comboUp ? ` · <b class="warn">COMBO ×${String(quickComboMult(m.streak)).replace('.', ',')}!</b>` : ''}</span>`;
+    if (last.right && duel) fb = `<span class="good">✓ Corect!</span> ${duel.oppFb}`;
+    else if (duel) fb = `<span class="bad">${last.timeout ? '⏱ Timp expirat' : '✗ Greșit'} — răspunsul corect: <b>${esc(last.answer)}</b></span> ${duel.oppFb}`;
+    else if (last.right) fb = `<span class="good">✓ Corect! +${fmt(last.cr)} CR · +${last.pts} puncte${last.comboUp ? ` · <b class="warn">COMBO ×${String(quickComboMult(m.streak)).replace('.', ',')}!</b>` : ''}</span>`;
     else fb = `<span class="bad">${last.timeout ? '⏱ Timp expirat' : '✗ Greșit'} — răspunsul corect: <b>${esc(last.answer)}</b>${surv ? ' · −1 viață' : ''}</span>`;
   } else if (m.aiHint) {
     fb = `<span style="color:var(--b)">🤖 AI-ul tău crede că e <b>„${esc(m.aiHint.option)}”</b> · încredere ${m.aiHint.conf}%</span>`;
@@ -1009,16 +951,16 @@ function htmlQuickGame(m) {
   const qa = !reveal && !m.aiHint && m.aiLeft > 0 ? '' : (m.aiLeft <= 0 && !m.aiHint ? 'Ai folosit „Întreabă AI-ul” în acest joc' : 'Indisponibil acum');
   const qf = !reveal && !m.removed.length && m.fiftyLeft > 0 ? '' : (m.fiftyLeft <= 0 && !m.removed.length ? 'Ai folosit 50/50 în acest joc' : 'Indisponibil acum');
   const core = equippedOfType('core');
-  const tip = core ? `<span class="good">Nucleu echipat: +${Q.coreBonusAI} „Întreabă AI-ul” pe joc</span>` : `Sfat: o carte <b>Nucleu</b> echipată îți dă încă un „Întreabă AI-ul”. Antrenează AI-ul ca să fie mai sigur pe el.`;
+  const tip = duel ? duel.tip : core ? `<span class="good">Nucleu echipat: +${Q.coreBonusAI} „Întreabă AI-ul” pe joc</span>` : `Sfat: o carte <b>Nucleu</b> echipată îți dă încă un „Întreabă AI-ul”. Antrenează AI-ul ca să fie mai sigur pe el.`;
   return head + `<div class="qhead">${left}${combo}${right}</div>
-    <div class="qtimer-row"><div class="timer"><i id="qbar"></i></div><span id="qsec">${Math.ceil(Q.timeMs / 1000)}</span></div>
+    <div class="qtimer-row"><div class="timer"><i id="qbar"></i></div><span id="qsec">${Math.ceil((m.timeMs || Q.timeMs) / 1000)}</span></div>
     <div class="tiny dim">${q.kind === 'math' ? 'MATEMATICĂ' : 'CULTURĂ GENERALĂ · ' + esc(q.cat).toUpperCase()} · dificultate ${q.diff}/10</div>
     <div class="qtext">${esc(q.text)}</div>
     <div class="opts">${opts}</div>
     <div class="qfb">${fb}</div>
     <div class="qhelpers">${btn(`🤖 Întreabă AI-ul <span class="cost">(${m.aiLeft})</span>`, 'quickAI', undefined, qa, 'accent')}${btn(`✂ 50/50 <span class="cost">(${m.fiftyLeft})</span>`, 'quickFifty', undefined, qf, '')}</div>
     <div class="tiny dim qtip">${tip}</div>
-    ${m.full ? '' : `<div class="tiny warn" style="margin-top:4px">Ai jucat deja ${CONFIG.QUICK.dailyFull} jocuri azi: acum primești ${Math.round(Q.reducedMult * 100)}% din recompense.</div>`}`;
+    ${m.full || duel ? '' : `<div class="tiny warn" style="margin-top:4px">Ai jucat deja ${CONFIG.QUICK.dailyFull} jocuri azi: acum primești ${Math.round(Q.reducedMult * 100)}% din recompense.</div>`}`;
 }
 function htmlQuickEnd(m) {
   const r = m.result || {}, surv = m.mode === 'survival', d = quickDay();
@@ -1064,7 +1006,7 @@ function renderQuick() {
 function updateQuickTimer() {
   const m = QUICK, bar = document.getElementById('qbar'), sec = document.getElementById('qsec');
   if (!m || !bar) return;
-  const T = CONFIG.QUICK.timeMs;
+  const T = m.timeMs || CONFIG.QUICK.timeMs;
   const left = m.phase === 'question' ? clamp(1 - (performance.now() - m.qStart) / T, 0, 1) : 0;
   bar.style.transform = `scaleX(${left.toFixed(3)})`;
   bar.style.background = left < 0.25 ? 'var(--bad)' : left < 0.5 ? 'var(--warn)' : 'var(--b)';
@@ -1086,8 +1028,9 @@ function afterQuickDone() {
   const m = QUICK, r = m && m.result;
   if (!r) return;
   if (r.answered) {
-    UI.lastResult = `${m.mode === 'quick' ? 'Quiz Rapid' : 'Supraviețuire'} — ${r.correct} corecte, ${fmt(r.score)} puncte, <span class="cr">+${fmt(r.cr)} CR</span> · <span class="dtc">+${r.dt} DT</span>${r.record ? ' · <b class="warn">record nou!</b>' : ''}`;
-    setPetState(r.record || r.perfect ? 'correct' : 'idle', 1500);
+    if (m.mode === 'duel') UI.lastResult = `Duel ${r.defense ? 'de apărare ' : ''}pentru ${esc(r.label)} — ${r.win ? '<span class="good">câștigat</span>' : '<span class="bad">pierdut</span>'} ${r.correct}–${r.oppCorrect} cu ${esc(r.opp.name)}, <span class="cr">+${fmt(r.cr)} CR</span>`;
+    else UI.lastResult = `${m.mode === 'quick' ? 'Quiz Rapid' : 'Supraviețuire'} — ${r.correct} corecte, ${fmt(r.score)} puncte, <span class="cr">+${fmt(r.cr)} CR</span> · <span class="dtc">+${r.dt} DT</span>${r.record ? ' · <b class="warn">record nou!</b>' : ''}`;
+    setPetState(r.record || r.perfect || r.win ? 'correct' : 'idle', 1500);
   }
   if (!quickModalOpen()) { // fereastra a fost închisă între timp
     if (r.unlocked && r.unlocked.length) toast('Nou deblocat: ' + r.unlocked.map(f => f.name).join(', '), 'warn');
@@ -1277,7 +1220,7 @@ function openDebug() {
   const infl = e.lastHour.burned ? (e.lastHour.minted / e.lastHour.burned).toFixed(2) : '∞';
   openModal(modalHead('Panou de depanare') + `<div class="col">
     <div class="row"><span class="small">Viteza timpului:</span>${[1, 10, 100].map(x => `<button class="chip ${UI.speed === x ? 'on' : ''}" data-act="dbgSpeed" data-args="${x}">x${x}</button>`).join('')}${btn('+1 oră', 'dbgAdd', 'hour', '', 'sm')}</div>
-    <div class="row">${[['cr', '+100K CR'], ['dt', '+100 DT'], ['land', '+1000 SU'], ['shards', '+500 fragmente'], ['nft', '+Echipament Rar (4 tipuri)'], ['nftrand', '+10 cărți'], ['unique', '+1 Unică'], ['recal', '+5 Recalibratoare'], ['energy', 'Energie AI maximă'], ['live', 'Reîmprospătează quiz live'], ['rating', '+100 rating'], ['stamina', 'Stamina plină'], ['crit', 'Forțează starea critică'], ['season', 'Încheie sezonul'], ['unlock', 'Deblochează tot']].map(([k, l]) => btn(l, 'dbgAdd', k, '', 'sm')).join('')}</div>
+    <div class="row">${[['cr', '+100K CR'], ['dt', '+100 DT'], ['land', '+5 sectoare'], ['attack', 'Declanșează atac'], ['shards', '+500 fragmente'], ['nft', '+Echipament Rar (4 tipuri)'], ['nftrand', '+10 cărți'], ['unique', '+1 Unică'], ['recal', '+5 Recalibratoare'], ['energy', 'Energie AI maximă'], ['live', 'Reîmprospătează quiz live'], ['rating', '+100 rating'], ['stamina', 'Stamina plină'], ['season', 'Încheie sezonul'], ['unlock', 'Deblochează tot']].map(([k, l]) => btn(l, 'dbgAdd', k, '', 'sm')).join('')}</div>
     <div class="card"><h4>Economie</h4><div class="kv"><span>CR emise total</span><b>${fmt(e.minted)}</b><span>CR arse total</span><b>${fmt(e.burned)}</b><span>Ultima oră emise / arse</span><b>${fmt(e.lastHour.minted)} / ${fmt(e.lastHour.burned)}</b><span>Indicator inflație (emise/arse)</span><b class="${infl > 2 ? 'warn' : 'good'}">${infl}</b><span>Cache grafică</span><b>${Art.cacheSize()}</b><span>Anunțuri pe piață</span><b>${S.market.listings.length}</b></div></div>
     <div class="card"><div class="row between"><h4 style="margin:0">Autoteste</h4>${btn('Rulează testele', 'dbgTests', undefined, '', 'sm primary')}</div><div id="dbgtests" style="margin-top:6px"></div></div></div>`, true);
 }
@@ -1286,7 +1229,7 @@ function openDebug() {
 const TUTORIAL = [
   ['Răspunzi la întrebări, câștigi CR și DT', `Apasă <b class="good">▶ Joacă acum — Quiz Rapid</b>: 10 întrebări, iar <b>tu</b> alegi răspunsul. Răspunsurile corecte la rând cresc <b class="warn">combo</b>-ul (până la ×3) și îți aduc <b class="cr">Credite (CR)</b> și <b class="dtc">Tokeni de date (DT)</b>.`],
   ['Antrenează-ți AI-ul cu DT', `Cheltuie DT în panoul <b>Baza de antrenament AI</b> ca să-i crești AI-ului tău IQ-ul matematic și cultura generală. Un AI mai bun îți dă sugestii mai sigure când apeși <b>🤖 Întreabă AI-ul</b> și joacă singur în <b>Arena Solo</b>.`],
-  ['Restul se deblochează pe măsură ce joci', `Multiplayer, Piața, Laboratorul AI, terenul, sezonul și breslele apar treptat, după câteva jocuri. Nu trebuie să înveți totul acum — cardul <b style="color:var(--b)">Următorul pas</b> îți spune mereu ce merită făcut.`],
+  ['Restul se deblochează pe măsură ce joci', `Teritoriul (dueluri pentru sectoare), Multiplayer, Piața, Laboratorul AI, sezonul și breslele apar treptat, după câteva jocuri. Nu trebuie să înveți totul acum — cardul <b style="color:var(--b)">Următorul pas</b> îți spune mereu ce merită făcut.`],
 ];
 function showTutorial(step) {
   if (step >= TUTORIAL.length) { S.tutorialStep = TUTORIAL.length; saveGame(); closeModal(); return; }
@@ -1303,7 +1246,7 @@ function showAwaySummary(before, ms) {
     ['Tokeni de date', `+${Math.max(0, d(before.dt, S.player.dt))} DT`],
     ['Cărți vândute', d(before.sold, counter('cardSold') + counter('nftSold'))],
     ['Comisioane stand', `+${fmt(d(before.comm, S.market.standEarned))} CR`],
-    ['Extinderi server', d(before.exp, S.server.expansions)],
+    ['Sectoare în Teritoriu', `${territoryCount()}${before.terr !== undefined && territoryCount() !== before.terr ? ` (${territoryCount() - before.terr > 0 ? '+' : ''}${territoryCount() - before.terr})` : ''}${S.duel.attacks.length ? ' · <b class="bad">⚠ atacat!</b>' : ''}`],
   ];
   if (g && before.vault !== null) rows.push(['Seiful breslei', `+${fmt(d(before.vault, g.vault))} GV`]);
   openModal(modalHead('Cât ai lipsit') + `<div class="kv">${rows.map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join('')}</div>

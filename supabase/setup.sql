@@ -169,3 +169,72 @@ grant execute on function public.cn_save(text, text, jsonb, integer, boolean) to
 grant execute on function public.cn_ai_answers_add(text, text, jsonb) to anon;
 grant execute on function public.cn_change_pin(text, text, text) to anon;
 grant execute on function public.cn_delete(text, text) to anon;
+
+-- ============================================================
+-- Top realizări umane (Quiz Rapid, Supraviețuire, Adevărat/Fals,
+-- răspunsuri corecte, dueluri, teritoriu) — js/top.js
+-- Recordurile se trimit cu ID + PIN; topul se citește public
+-- (doar numele contului și valoarea, nimic altceva).
+-- ============================================================
+create table if not exists public.cn_records (
+  username    text primary key references public.cn_players(username) on delete cascade,
+  surv        integer not null default 0,
+  quick       integer not null default 0,
+  tf          integer not null default 0,
+  correct     integer not null default 0,
+  duels       integer not null default 0,
+  territory   integer not null default 0,
+  updated_at  timestamptz not null default now()
+);
+alter table public.cn_records enable row level security;
+
+-- ---------- trimite recordurile (verifică PIN-ul; valorile absurde sunt plafonate) ----------
+create or replace function public.cn_records_submit(p_user text, p_pin text, p_rec jsonb)
+returns json
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare v text; uname text;
+  c_surv integer; c_quick integer; c_tf integer; c_correct integer; c_duels integer; c_terr integer;
+begin
+  v := public.cn_verify(p_user, p_pin);
+  if v <> 'ok' then return json_build_object('ok', false, 'error', v); end if;
+  select username into uname from public.cn_players where username_low = lower(p_user);
+  c_surv    := least(greatest(coalesce((p_rec->>'surv')::numeric, 0), 0), 1000)::integer;
+  c_quick   := least(greatest(coalesce((p_rec->>'quick')::numeric, 0), 0), 10000)::integer;
+  c_tf      := least(greatest(coalesce((p_rec->>'tf')::numeric, 0), 0), 100000)::integer;
+  c_correct := least(greatest(coalesce((p_rec->>'correct')::numeric, 0), 0), 10000000)::integer;
+  c_duels   := least(greatest(coalesce((p_rec->>'duels')::numeric, 0), 0), 1000000)::integer;
+  c_terr    := least(greatest(coalesce((p_rec->>'territory')::numeric, 0), 0), 10000)::integer;
+  insert into public.cn_records as r (username, surv, quick, tf, correct, duels, territory, updated_at)
+  values (uname, c_surv, c_quick, c_tf, c_correct, c_duels, c_terr, now())
+  on conflict (username) do update set
+    surv = greatest(r.surv, excluded.surv),          -- recordurile nu scad niciodată
+    quick = greatest(r.quick, excluded.quick),
+    tf = greatest(r.tf, excluded.tf),
+    correct = greatest(r.correct, excluded.correct),
+    duels = greatest(r.duels, excluded.duels),
+    territory = excluded.territory,                  -- teritoriul se poate și pierde
+    updated_at = now();
+  return json_build_object('ok', true);
+exception when others then
+  return json_build_object('ok', false, 'error', 'bad_records');
+end $$;
+
+-- ---------- topul global pe o categorie ----------
+create or replace function public.cn_top(p_kind text, p_limit integer default 50)
+returns json
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare lim integer := least(greatest(coalesce(p_limit, 50), 1), 100); res json;
+begin
+  if p_kind not in ('surv', 'quick', 'tf', 'correct', 'duels', 'territory') then
+    return json_build_object('ok', false, 'error', 'bad_kind');
+  end if;
+  execute format(
+    'select coalesce(json_agg(t), ''[]''::json) from (select username as u, %1$I as v from public.cn_records where %1$I > 0 order by %1$I desc, updated_at asc limit %2$s) t',
+    p_kind, lim) into res;
+  return json_build_object('ok', true, 'rows', res);
+end $$;
+
+grant execute on function public.cn_records_submit(text, text, jsonb) to anon;
+grant execute on function public.cn_top(text, integer) to anon;
