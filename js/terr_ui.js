@@ -39,12 +39,18 @@ function htmlTerrMap() {
     else if (able && cdLeft > 0) { cls += ' cd'; icon = '⏳'; }
     if (i === sel) cls += ' sel';
     if (i === fl) cls += ' captured';
-    const who = terrOwnerInfo(i);
-    const title = `${c.label} · ${D.name} · ${mine ? 'al tău' : who.name}${atk ? ' · ATACAT' : ''}`;
-    return `<button type="button" class="${cls}" style="--dc:${D.color}" data-act="terrSel" data-args="${i}" title="${esc(title)}" aria-label="${esc(title)}"><span class="tc-tag">${esc(terrOwnerTag(i))}</span>${icon ? `<span class="tc-ico">${icon}</span>` : ''}</button>`;
+    const who = terrOwnerInfo(i), bld = incomeAt(i), rich = terrIsRich(i);
+    let tag = esc(terrOwnerTag(i)), extra = '';
+    if (bld && mine) {
+      tag = `<span class="tc-bld">${incomeType(bld.type).icon}</span>`;
+      if (!atk) { const ex = terrExposed(i); cls += ex ? ' exposed' : ' safe'; icon = ex ? '⚠' : '🛡'; }
+    } else if (bld) extra += `<span class="tc-off" title="clădire inactivă">${incomeType(bld.type).icon}</span>`;
+    if (rich) extra += '<span class="tc-rich">💎</span>';
+    const title = `${c.label} · ${D.name} · ${mine ? 'al tău' : who.name}${rich ? ' · sector bogat ×2' : ''}${bld ? ' · ' + incomeType(bld.type).name + (mine ? (terrExposed(i) ? ' (expusă)' : ' (protejată)') : ' (inactivă)') : ''}${atk ? ' · ATACAT' : ''}`;
+    return `<button type="button" class="${cls}" style="--dc:${D.color}" data-act="terrSel" data-args="${i}" title="${esc(title)}" aria-label="${esc(title)}"><span class="tc-tag">${tag}</span>${icon ? `<span class="tc-ico">${icon}</span>` : ''}${extra}</button>`;
   }).join('');
   return `<div class="tmap" style="--n:${CONFIG.TERRITORY.size}">${cells}</div>
-    <div class="legend tlegend"><span><i class="lg mine"></i>Tu</span><span><i class="lg able"></i>Poți ataca</span><span><i class="lg far"></i>Prea departe</span><span><i class="lg under"></i>Atacat</span><span>⏳ Revanșă</span></div>`;
+    <div class="legend tlegend"><span><i class="lg mine"></i>Tu</span><span><i class="lg able"></i>Poți ataca</span><span><i class="lg far"></i>Prea departe</span><span><i class="lg under"></i>Atacat</span><span>⏳ Revanșă</span><span>💎 Bogat (×2)</span><span>🛡 Protejat</span><span class="warn">⚠ La margine</span></div>`;
 }
 
 // ---------- panoul sectorului selectat ----------
@@ -55,17 +61,22 @@ function htmlTerrSector(i) {
     <div class="small" style="margin:2px 0 8px"><span class="tdist" style="--dc:${D.color}">${esc(D.name)}</span></div>`;
   if (mine && atk) {
     const a = terrOwnerInfo(i, atk.by), why = whyDuel(i);
-    return head + `<div class="tattack small">⚠ <b>${esc(a.name)}</b>${a.tag ? ` <span class="gtag">[${esc(a.tag)}]</span>` : ''} vrea acest sector. Câștigă duelul în ${cd(atk.until)} sau îl pierzi.</div>
+    return head + `<div class="tattack small">⚠ <b>${esc(a.name)}</b>${a.tag ? ` <span class="gtag">[${esc(a.tag)}]</span>` : ''} vrea acest sector${incomeAt(i) ? ` și clădirea ta <b>${incomeType(incomeAt(i).type).name}</b>` : ''}. Câștigă duelul în ${cd(atk.until)} sau îl pierzi${incomeAt(i) ? ' (clădirea se oprește până îl recucerești)' : ''}.</div>
       <div class="kv small" style="margin:8px 0"><span>Bonus la apărare</span><b class="cr">+${fmt(CONFIG.TERRITORY.attack.defendCR * CONFIG.LEAGUES[S.player.league].reward * crMultiplier())} CR · +${CONFIG.TERRITORY.attack.defendDT} DT</b><span>Dacă pierzi duelul</span><b>poți reîncerca după ${fmtTime(CONFIG.TERRITORY.cooldownMs)}</b></div>
       ${btn(`⚔️ Apără sectorul — duel cu ${esc(a.name)}`, 'terrDuel', i, why, 'block primary big')}`;
   }
+  const richNote = terrIsRich(i) ? `<div class="trich small">💎 <b>Sector bogat</b> — o clădire de venit produce aici ×${incomeCfg().richMult}.</div>` : '';
   if (mine) {
-    return head + `<div class="small">${i === CONFIG.TERRITORY.home ? '⌂ <b class="good">Baza ta.</b> Nu poate fi atacată niciodată.' : '<b class="good">Sector al tău.</b>'}</div>
-      <div class="tiny dim" style="margin-top:6px">Fiecare sector îți dă ${CONFIG.TERRITORY.suPerSector} SU de teren (pentru standuri, Sediul breslei și standul de piață) și +${CONFIG.TERRITORY.crPctPerSector}% CR din toate jocurile.</div>`;
+    const exposed = terrExposed(i);
+    return head + richNote + `<div class="small">${i === CONFIG.TERRITORY.home ? '⌂ <b class="good">Baza ta.</b> Nu poate fi atacată niciodată.' : exposed ? '<b class="warn">⚠ La margine</b> — vecin cu sectoare străine, poate fi atacat.' : '<b class="good">🛡 În interior</b> — înconjurat de sectoarele tale (sau de marginea hărții), nu poate fi atacat.'}</div>
+      ${htmlIncomeSector(i)}
+      <div class="tiny dim" style="margin-top:8px">Fiecare sector îți dă ${CONFIG.TERRITORY.suPerSector} SU de teren (pentru standuri, Sediul breslei și standul de piață) și +${CONFIG.TERRITORY.crPctPerSector}% CR din toate jocurile.</div>`;
   }
+  const lostB = incomeAt(i);
+  const lostNote = lostB ? `<div class="toff small">💤 Clădirea ta <b>${incomeType(lostB.type).name}</b> e <b>inactivă</b> aici. Recucerește sectorul ca s-o repornești.</div>` : '';
   const opp = terrOpponent(i), rw = terrDuelReward(i), why = whyDuel(i);
   const owner = info.kind === 'neutral' ? '<span class="dim">Neutru — păzit de o sentinelă</span>' : `<b>${esc(info.name)}</b>${info.tag ? ` <span class="gtag">[${esc(info.tag)}]</span>` : ''}${info.guild ? ` <span class="tiny dim">${esc(info.guild.name)}</span>` : ''}`;
-  return head + `<div class="kv small"><span>Stăpân</span><span>${owner}</span>
+  return head + richNote + lostNote + `<div class="kv small"><span>Stăpân</span><span>${owner}</span>
       <span>Adversar</span><b>~${Math.round(opp.acc * 100)}% corecte · ${Math.round(tier.tMin / 1000)}–${Math.round(tier.tMax / 1000)} s</b>
       <span>Întrebări</span><b>${CONFIG.TERRITORY.questions} · dificultate ${tier.diff[0]}–${tier.diff[1]}</b>
       <span>Dacă câștigi</span><b><span class="cr">+${fmt(rw.cr)} CR</span> · <span class="dtc">+${rw.dt} DT</span>${rw.explore ? ' · <span class="warn">explorare bonus</span>' : ''}</b></div>
@@ -115,7 +126,8 @@ function htmlLand() {
   const h = territoryHelp(), du = S.duel;
   const alerts = du.attacks.map(a => {
     const o = terrOwnerInfo(a.idx, a.by);
-    return `<div class="talert"><span class="blink">⚠</span><div class="grow small"><b>${esc(o.name)}</b> îți atacă sectorul <b>${terrCell(a.idx).label}</b> — apără-l în ${cd(a.until)}</div>${btn('⚔️ Apără', 'terrDefend', a.idx, whyDuel(a.idx), 'sm danger')}</div>`;
+    const bld = incomeAt(a.idx);
+    return `<div class="talert"><span class="blink">⚠</span><div class="grow small"><b>${esc(o.name)}</b> îți atacă sectorul <b>${terrCell(a.idx).label}</b>${bld ? ` — atacă clădirea ta: <b>${incomeType(bld.type).icon} ${incomeType(bld.type).name}</b>` : ''} — apără-l în ${cd(a.until)}</div>${btn('⚔️ Apără', 'terrDefend', a.idx, whyDuel(a.idx), 'sm danger')}</div>`;
   }).join('');
   return `<div class="tintro">⚔️ Câștigă <b>dueluri de quiz</b> ca să cucerești sectoarele vecine. Mai mult teritoriu = mai mult CR și un AI care te ajută mai mult.</div>
   ${alerts}
@@ -124,6 +136,7 @@ function htmlLand() {
       ${htmlTerrMap()}</div>
     <div class="card tside">${htmlTerrSector(UI.terrSel)}</div>
   </div>
+  <div style="margin-top:10px">${htmlIncomeCard()}</div>
   <div class="cards" style="margin-top:10px">${htmlTerrBonuses(h)}${htmlTerrDistricts(h)}</div>
   <div style="margin-top:10px">${htmlTerrFeed()}</div>`;
 }
@@ -194,5 +207,56 @@ Object.assign(HANDLERS, {
     terrOpenTab();
     renderAll();
     setTimeout(() => { const el = document.querySelector('.tmapcard'); if (el && window.innerWidth < 768) window.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top + window.scrollY - 70), behavior: 'smooth' }); }, 30);
+  },
+});
+
+// ---------- clădiri de venit ----------
+function incRateText(res, v) { return `+${fmt(v)} ${incomeResName(res)}/h`; }
+function htmlIncomeSector(i) {
+  const I = incomeCfg(), b = incomeAt(i), rich = terrIsRich(i), exposed = terrExposed(i);
+  if (b) {
+    const T = incomeType(b.type), nx = T.levels[b.level + 1];
+    return `<div class="tbld"><div class="row between"><b>${T.icon} ${T.name} <span class="dim">· nivel ${b.level + 1}/${T.levels.length}</span></b><span class="${T.res === 'cr' ? 'cr' : T.res === 'dt' ? 'dtc' : 'shardc'}">${incRateText(T.res, incomeRate(b))}</span></div>
+      <div class="tiny ${exposed ? 'warn' : 'good'}" style="margin:4px 0 8px">${exposed ? '⚠ Expusă: dacă pierzi sectorul, clădirea se oprește. Mut-o în interior ca s-o protejezi.' : '🛡 Protejată: sectorul nu poate fi atacat.'}${b.made ? ` <span class="dim">· a produs ${fmt(b.made)} ${incomeResName(T.res)}</span>` : ''}</div>
+      <div class="row">${nx ? btn(`Nivel ${b.level + 2}: ${incRateText(T.res, nx.rate * (rich ? I.richMult : 1))} <span class="cost">${fmt(nx.cost)} CR</span>`, 'incUpgrade', b.id, whyUpgradeIncome(b.id), 'sm primary') : '<span class="good small">NIVEL MAXIM</span>'}
+      ${btn(`Mută <span class="cost">${fmt(incomeMoveFee(b))} CR</span>`, 'incMove', b.id, '', 'sm')}${btn(`Demontează <span class="cost">+${fmt(incomeRefund(b))} CR</span>`, 'incDismantle', b.id, '', 'sm danger')}</div></div>`;
+  }
+  const mv = UI.incomeMove && incomeList().find(x => x.id === UI.incomeMove);
+  if (mv) {
+    return `<div class="tbld"><div class="small">Muți <b>${incomeType(mv.type).icon} ${incomeType(mv.type).name}</b> de pe ${terrCell(mv.idx).label}.</div>
+      ${exposed ? '<div class="tiny warn" style="margin:4px 0">⚠ Atenție: e la margine, poate fi atacat.</div>' : '<div class="tiny good" style="margin:4px 0">🛡 Aici e protejată.</div>'}
+      <div class="row">${btn(`Mută aici <span class="cost">${fmt(incomeMoveFee(mv))} CR</span>`, 'incMoveHere', i, whyMoveIncome(mv.id, i), 'sm primary')}${btn('Anulează', 'incMoveCancel', undefined, '', 'sm')}</div></div>`;
+  }
+  const used = incomeList().length, slots = incomeSlots(), nxs = incomeNextSlotAt();
+  const opts = I.types.map(T => btn(`${T.icon} ${T.name} <span class="cost">${fmt(T.levels[0].cost)} CR · ${incRateText(T.res, T.levels[0].rate * (rich ? I.richMult : 1))}</span>`, 'incBuild', { i, type: T.id }, whyBuildIncome(i, T.id), 'block sm')).join('');
+  return `<div class="tbld"><div class="row between"><b class="small">Construiește o clădire de venit</b><span class="tiny dim">locuri ${used}/${slots}${nxs ? ` · următorul la ${nxs} sectoare` : ''}</span></div>
+    ${exposed ? '<div class="tiny warn" style="margin:4px 0">⚠ Atenție: e la margine, poate fi atacat. Mai sigur: un sector din interior.</div>' : '<div class="tiny good" style="margin:4px 0">🛡 Sector protejat — loc bun pentru o clădire.</div>'}
+    <div class="col tbld-opts">${opts}</div></div>`;
+}
+function htmlIncomeCard() {
+  const I = incomeCfg(), tot = incomeTotals(), list = incomeList(), slots = incomeSlots(), nxs = incomeNextSlotAt();
+  const parts = [];
+  if (tot.cr) parts.push(`<span class="cr">+${fmt(tot.cr)} CR/h</span>`);
+  if (tot.dt) parts.push(`<span class="dtc">+${fmt(tot.dt)} DT/h</span>`);
+  if (tot.shards) parts.push(`<span class="shardc">+${fmt(tot.shards)} fragmente/h</span>`);
+  const rows = list.map(b => {
+    const T = incomeType(b.type), act = incomeActive(b), ex = act && terrExposed(b.idx);
+    const st = !act ? '<span class="tst off">💤 inactivă</span>' : ex ? '<span class="tst ex">⚠ expusă</span>' : '<span class="tst ok">🛡 protejată</span>';
+    return `<button type="button" class="tbrow" data-act="terrSel" data-args="${b.idx}"><span>${T.icon}</span><span class="tbname">${T.name} <span class="dim">nv ${b.level + 1} · ${terrCell(b.idx).label}${terrIsRich(b.idx) ? ' 💎' : ''}</span></span><span class="tiny ${act ? '' : 'mute'}">${incRateText(T.res, incomeRate(b))}</span>${st}</button>`;
+  }).join('');
+  return `<div class="card"><div class="row between"><h3 style="margin:0">🏗 Venit pasiv</h3><span class="small">${parts.length ? parts.join(' · ') : '<span class="dim">+0/h</span>'}</span></div>
+    <div class="tiny dim" style="margin:6px 0">Construiești clădiri pe sectoarele tale; produc continuu, și când nu ești în joc (cel mult ${CONFIG.OFFLINE_CAP_HOURS} h). Boții pot ataca <b>doar marginea</b> teritoriului tău (sectoarele vecine cu unele străine; marginea hărții e sigură) — ține clădirile în interior. Dacă pierzi un sector, clădirea de pe el se oprește până îl recucerești.</div>
+    <div class="small" style="margin-bottom:6px">Locuri de construcție: <b class="${list.length > slots ? 'warn' : 'good'}">${list.length}/${slots}</b>${list.length > slots ? ' <span class="warn tiny">— ai pierdut sectoare: clădirile rămân, dar nu poți construi altele până recâștigi teritoriu</span>' : nxs ? ` <span class="dim">· următorul la ${nxs} sectoare</span>` : ''}${slots === 0 && !list.length ? ` <span class="dim">— primul loc la ${I.slotsFirstAt} sectoare</span>` : ''}</div>
+    ${rows ? `<div class="tblist">${rows}</div>` : `<div class="tiny dim">${slots ? 'Atinge un sector al tău pe hartă și alege o clădire.' : 'Cucerește sectoare ca să deblochezi primul loc.'}</div>`}</div>`;
+}
+Object.assign(HANDLERS, {
+  incBuild(a) { const r = doAct(() => actBuildIncome(a.i, a.type)); if (r && r.ok) UI.terrFlash = { i: a.i, until: performance.now() + 1500 }; },
+  incUpgrade(id) { doAct(() => actUpgradeIncome(id)); },
+  incMove(id) { UI.incomeMove = id; toast('Alege pe hartă un sector al tău fără clădire, apoi „Mută aici”'); },
+  incMoveCancel() { UI.incomeMove = null; },
+  incMoveHere(i) { const r = doAct(() => actMoveIncome(UI.incomeMove, i)); if (r && r.ok) UI.incomeMove = null; },
+  incDismantle(id) {
+    const b = incomeList().find(x => x.id === id); if (!b) return;
+    confirmBox('Demontezi clădirea?', `${incomeType(b.type).name} dispare și primești înapoi <b class="cr">${fmt(incomeRefund(b))} CR</b> (${Math.round(incomeCfg().dismantleRefund * 100)}% din investiție).`, 'Demontează', () => doAct(() => actDismantleIncome(id)), true);
   },
 });

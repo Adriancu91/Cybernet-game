@@ -54,7 +54,7 @@ function terrTier(i) { return CONFIG.TERRITORY.tiers[terrCell(i).tier]; }
 function terrLabel(i) { const c = terrCell(i); return `${c.label} · ${terrDistrict(c.district).name}`; }
 
 // ---------- stare ----------
-function newTerritoryState() { return { owner: [], explored: {}, cd: {}, botAcc: 0, rev: 0, feed: [] }; }
+function newTerritoryState() { return { owner: [], explored: {}, cd: {}, botAcc: 0, rev: 0, feed: [], buildings: [] }; }
 function newDuelState() { return { wins: 0, losses: 0, captures: 0, defended: 0, lost: 0, played: 0, attacks: [], nextAttackAt: -1 }; }
 function terrReady() { return !!(S && S.territory && S.territory.owner && S.territory.owner.length); }
 function isPlayerSector(i) { return S.territory.owner[i] === 'p'; }
@@ -255,7 +255,9 @@ function duelFinish(m, abandoned) {
       cr = tier.winCR * L.reward * crMultiplier() * mult;
       dt = tier.winDT * mult;
       if (!S.territory.explored[d.idx]) res.explore = terrExploreReward(d.idx);
-      log('ARENA', `SECTOR CUCERIT: ${terrLabel(d.idx)} (${m.correct}–${d.oppCorrect} cu ${d.opp.name}). Ai acum ${territoryCount()} sectoare.`);
+      const bld = incomeAt(d.idx);
+      res.reactivated = bld ? incomeType(bld.type).name : null;
+      log('ARENA', `SECTOR CUCERIT: ${terrLabel(d.idx)} (${m.correct}–${d.oppCorrect} cu ${d.opp.name}). Ai acum ${territoryCount()} sectoare.${bld ? ` Clădirea ${res.reactivated} funcționează din nou.` : ''}`);
       terrFeed(`Ai cucerit ${terrCell(d.idx).label} de la ${d.opp.name}`);
     }
   } else {
@@ -334,6 +336,7 @@ function migrateTerritory(data) {
 function territoryStep(dtMs) {
   if (!terrReady()) return;
   const t = S.territory, du = S.duel, T = CONFIG.TERRITORY, A = T.attack;
+  incomeStep(dtMs);
   t.botAcc += dtMs * T.botMovesPerHour / CONFIG.HOUR;
   while (t.botAcc >= 1) { t.botAcc -= 1; terrBotMove(); }
   // atacuri expirate: sectorul trece la atacator
@@ -357,14 +360,16 @@ function terrSpawnAttack(force) {
   if (du.attacks.length >= A.maxActive && !force) return null;
   const cand = terrBorderSectors();
   if (!cand.length) return null;
-  const withBot = cand.filter(c => c.nb.some(j => { const o = S.territory.owner[j]; return o && o !== 'p'; }));
-  const c = pick(withBot.length ? withBot : cand);
+  // sectoarele cu clădiri de venit sunt ținte de 2× mai probabile; vecinii boți contează și ei
+  const hasBotNb = c => c.nb.some(j => { const o = S.territory.owner[j]; return o && o !== 'p'; });
+  const c = cand[weightedIndex(cand.map(x => (incomeAt(x.i) ? 2 : 1) * (hasBotNb(x) ? 2 : 1)))];
   const botNb = c.nb.map(j => S.territory.owner[j]).filter(o => o && o !== 'p' && botById(o));
   const by = botNb.length ? pick(botNb) : pick(S.bots).id;
   const a = { idx: c.i, by, at: S.time, until: S.time + A.timerMs };
   du.attacks.push(a);
   const info = terrOwnerInfo(c.i, by);
-  log('ARENA', `⚠ ATAC: ${info.name}${info.tag ? ' [' + info.tag + ']' : ''} îți atacă sectorul ${terrLabel(c.i)}! Apără-l în ${fmtTime(A.timerMs)} sau îl pierzi.`);
+  const bld = incomeAt(c.i);
+  log('ARENA', `⚠ ATAC: ${info.name}${info.tag ? ' [' + info.tag + ']' : ''} îți atacă sectorul ${terrLabel(c.i)}${bld ? ' — și clădirea ta: ' + incomeType(bld.type).name : ''}! Apără-l în ${fmtTime(A.timerMs)} sau îl pierzi.`);
   terrFeed(`${info.name} îți atacă sectorul ${c.label}`);
   return a;
 }
@@ -376,7 +381,8 @@ function terrLoseSector(a) {
   terrSetOwner(a.idx, by);
   du.lost++;
   const info = terrOwnerInfo(a.idx);
-  log('ARENA', `Ai pierdut sectorul ${terrLabel(a.idx)} în fața lui ${info.name} — atacul nu a fost respins la timp.`);
+  const bld = incomeAt(a.idx);
+  log('ARENA', `Ai pierdut sectorul ${terrLabel(a.idx)} în fața lui ${info.name} — atacul nu a fost respins la timp.${bld ? ` Clădirea ${incomeType(bld.type).name} este acum INACTIVĂ (recucerește sectorul ca s-o repornești).` : ''}`);
   terrFeed(`${info.name} ți-a luat sectorul ${terrCell(a.idx).label}`);
 }
 // boții își mută granițele: ocupă sectoare neutre, se fură între ei, uneori abandonează câte unul
@@ -404,4 +410,147 @@ function terrDebugAttack() {
   if (!terrBorderSectors().length) terrGrowContiguous(2, false);
   const a = terrSpawnAttack(true);
   return a ? ok('Atac declanșat asupra ' + terrCell(a.idx).label) : fail('Nu există sector de graniță de atacat');
+}
+
+// ============================================================
+// CLĂDIRI DE VENIT PASIV
+// O clădire stă pe un sector; produce doar cât sectorul e al tău.
+// Doar sectoarele de la MARGINE (vecine cu un sector care nu e al tău) pot fi atacate;
+// marginea hărții nu contează ca margine.
+// ============================================================
+function incomeCfg() { return CONFIG.TERRITORY.income; }
+function incomeType(id) { return incomeCfg().types.find(t => t.id === id) || null; }
+function incomeList() { if (!S.territory.buildings) S.territory.buildings = []; return S.territory.buildings; }
+function incomeAt(i) { return terrReady() ? incomeList().find(b => b.idx === i) || null : null; }
+function incomeActive(b) { return isPlayerSector(b.idx); }
+// sector de margine: al tău și vecin (sus/jos/stânga/dreapta) cu un sector care nu e al tău
+function terrIsBorder(i) { return isPlayerSector(i) && terrNeighbors(i).some(j => !isPlayerSector(j)); }
+// expus = poate fi atacat (baza nu e atacată niciodată)
+function terrExposed(i) { return i !== CONFIG.TERRITORY.home && terrIsBorder(i); }
+
+// „💎 Sector bogat”: ales determinist din sămânța jocului, câteva pe cartier, mai multe spre centru
+let TERR_RICH_CACHE = { seed: null, set: null };
+function terrRichSet() {
+  if (TERR_RICH_CACHE.seed === S.seed && TERR_RICH_CACHE.set) return TERR_RICH_CACHE.set;
+  const r = seededRng((S.seed ^ 0x5eed1e) | 0), map = terrMap(), set = new Set();
+  for (const D of TERR_DISTRICTS) {
+    const cells = map.filter(c => c.district === D.id && c.i !== CONFIG.TERRITORY.home).map(c => c.i);
+    for (let k = cells.length - 1; k > 0; k--) { const j = Math.floor(r() * (k + 1)); [cells[k], cells[j]] = [cells[j], cells[k]]; }
+    cells.slice(0, incomeCfg().richPerDistrict[D.tier] || 0).forEach(i => set.add(i));
+  }
+  TERR_RICH_CACHE = { seed: S.seed, set };
+  return set;
+}
+function terrIsRich(i) { return terrRichSet().has(i); }
+
+function incomeSlots(n) {
+  const I = incomeCfg();
+  n = n === undefined ? territoryCount() : n;
+  if (n < I.slotsFirstAt) return 0;
+  return Math.min(I.slotsMax, 1 + Math.floor((n - I.slotsFirstAt) / I.slotsEvery));
+}
+function incomeNextSlotAt() {
+  const I = incomeCfg(), cur = incomeSlots();
+  if (cur >= I.slotsMax) return null;
+  return I.slotsFirstAt + cur * I.slotsEvery;
+}
+function incomeRate(b) { // pe oră, cu bonusul de sector bogat
+  const T = incomeType(b.type);
+  return T.levels[b.level].rate * (terrIsRich(b.idx) ? incomeCfg().richMult : 1);
+}
+function incomeInvested(b) { const T = incomeType(b.type); let c = 0; for (let l = 0; l <= b.level; l++) c += T.levels[l].cost; return c; }
+function incomeTotals() {
+  const out = { cr: 0, dt: 0, shards: 0, active: 0, inactive: 0 };
+  if (!terrReady()) return out;
+  for (const b of incomeList()) {
+    if (!incomeActive(b)) { out.inactive++; continue; }
+    out.active++;
+    out[incomeType(b.type).res] += incomeRate(b);
+  }
+  return out;
+}
+// producție continuă (și offline, prin pasul simulării — limitat de plafonul offline)
+function incomeStep(dtMs) {
+  const list = S.territory.buildings;
+  if (!list || !list.length) return;
+  for (const b of list) {
+    if (!incomeActive(b)) continue;
+    b.acc = (b.acc || 0) + incomeRate(b) * dtMs / CONFIG.HOUR;
+    if (b.acc < 1) continue;
+    const n = Math.floor(b.acc);
+    b.acc -= n;
+    const res = incomeType(b.type).res;
+    if (res === 'cr') addCR(n, 'passive');
+    else if (res === 'dt') addDT(n);
+    else addShards(n);
+    b.made = (b.made || 0) + n;
+    count('passive_' + res, n);
+  }
+}
+
+function whyBuildIncome(i, type) {
+  const T = incomeType(type);
+  if (!T) return 'Alege o clădire';
+  if (!terrReady() || !isPlayerSector(i)) return 'Poți construi doar pe sectoarele tale';
+  if (incomeAt(i)) return 'Sectorul are deja o clădire';
+  const slots = incomeSlots();
+  if (incomeList().length >= slots) {
+    const nx = incomeNextSlotAt();
+    return slots === 0 ? `Primul loc de construcție vine la ${incomeCfg().slotsFirstAt} sectoare` : `Toate cele ${slots} locuri sunt ocupate${nx ? ` — următorul la ${nx} sectoare` : ''}`;
+  }
+  if (!canPayCR(T.levels[0].cost)) return `Îți mai trebuie ${fmt(T.levels[0].cost - S.player.cr)} CR`;
+  return '';
+}
+function actBuildIncome(i, type) {
+  i = Number(i);
+  const r = whyBuildIncome(i, type); if (r) return fail(r);
+  const T = incomeType(type);
+  spendCR(T.levels[0].cost, 'income');
+  const b = { id: newId('i'), type, level: 0, idx: i, acc: 0, made: 0 };
+  incomeList().push(b);
+  log('SYSTEM', `${T.name} construită pe ${terrLabel(i)}: +${incomeRate(b)} ${incomeResName(T.res)}/h${terrExposed(i) ? ' — atenție, e la margine și poate fi atacată' : ' — protejată în interior'}.`);
+  return Object.assign(ok(`${T.name} construită`), { b });
+}
+function incomeResName(res) { return res === 'cr' ? 'CR' : res === 'dt' ? 'DT' : 'fragmente'; }
+function whyUpgradeIncome(id) {
+  const b = incomeList().find(x => x.id === id);
+  if (!b) return 'Clădirea nu a fost găsită';
+  const T = incomeType(b.type), nx = T.levels[b.level + 1];
+  if (!nx) return 'Nivel maxim';
+  if (!incomeActive(b)) return 'Clădirea e inactivă — recucerește sectorul';
+  if (!canPayCR(nx.cost)) return `Îți mai trebuie ${fmt(nx.cost - S.player.cr)} CR`;
+  return '';
+}
+function actUpgradeIncome(id) {
+  const r = whyUpgradeIncome(id); if (r) return fail(r);
+  const b = incomeList().find(x => x.id === id), T = incomeType(b.type);
+  spendCR(T.levels[b.level + 1].cost, 'income');
+  b.level++;
+  return ok(`${T.name} nivel ${b.level + 1}: +${incomeRate(b)} ${incomeResName(T.res)}/h`);
+}
+function incomeMoveFee(b) { return Math.ceil(incomeInvested(b) * incomeCfg().moveFee); }
+function whyMoveIncome(id, i) {
+  const b = incomeList().find(x => x.id === id);
+  if (!b) return 'Clădirea nu a fost găsită';
+  if (!isPlayerSector(i)) return 'Poți muta clădirea doar pe un sector al tău';
+  if (incomeAt(i)) return 'Sectorul are deja o clădire';
+  if (!canPayCR(incomeMoveFee(b))) return `Mutarea costă ${fmt(incomeMoveFee(b))} CR`;
+  return '';
+}
+function actMoveIncome(id, i) {
+  i = Number(i);
+  const r = whyMoveIncome(id, i); if (r) return fail(r);
+  const b = incomeList().find(x => x.id === id), fee = incomeMoveFee(b);
+  spendCR(fee, 'income');
+  b.idx = i; b.acc = 0;
+  return ok(`${incomeType(b.type).name} mutată pe ${terrCell(i).label} (${fmt(fee)} CR)`);
+}
+function incomeRefund(b) { return Math.floor(incomeInvested(b) * incomeCfg().dismantleRefund); }
+function actDismantleIncome(id) {
+  const b = incomeList().find(x => x.id === id);
+  if (!b) return fail('Clădirea nu a fost găsită');
+  const refund = incomeRefund(b);
+  S.territory.buildings = incomeList().filter(x => x !== b);
+  addCR(refund, 'refund');
+  return ok(`${incomeType(b.type).name} demontată: +${fmt(refund)} CR`);
 }

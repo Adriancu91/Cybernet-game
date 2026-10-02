@@ -120,6 +120,22 @@ const CONFIG = {
       defendDT: 8,
     },
     botMovesPerHour: 4,        // cât de des își schimbă boții sectoarele între ei
+    // ---------- clădiri de venit pasiv pe sectoarele tale ----------
+    income: {
+      types: [
+        // levels: cost în CR al nivelului (cumulativ = suma), rate = producție pe oră la acel nivel
+        { id: 'farm', name: 'Fermă de servere',       icon: '🖥️', res: 'cr',     levels: [{ cost: 1500, rate: 60 }, { cost: 2500, rate: 120 }, { cost: 6000, rate: 220 }] },
+        { id: 'mine', name: 'Mină de date',           icon: '⛏️', res: 'dt',     levels: [{ cost: 1000, rate: 2 },  { cost: 3000, rate: 4 },   { cost: 8000, rate: 7 }] },
+        { id: 'lab',  name: 'Laborator de fragmente', icon: '💠', res: 'shards', levels: [{ cost: 2000, rate: 1 },  { cost: 5000, rate: 2 },   { cost: 12000, rate: 4 }] },
+      ],
+      slotsFirstAt: 3,         // primul loc de construcție la 3 sectoare
+      slotsEvery: 5,           // apoi +1 loc la fiecare 5 sectoare (8, 13, 18...)
+      slotsMax: 6,
+      richMult: 2,             // „💎 Sector bogat”: producție ×2
+      richPerDistrict: { 0: 1, 1: 2, 2: 3, 3: 1 },   // câte sectoare bogate are un cartier, după inel (spre centru mai multe)
+      dismantleRefund: 0.5,    // demontare: primești înapoi 50% din CR investiți
+      moveFee: 0.2,            // mutare: 20% din CR investiți
+    },
   },
   SERVER: {
     startTotal: 30000,

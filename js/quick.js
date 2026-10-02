@@ -256,14 +256,19 @@ function nextStep(today) {
   const terr = typeof territoryCount === 'function' && S.territory && S.territory.owner && S.territory.owner.length;
   // un sector atacat are prioritate maximă: altfel îl pierzi
   if (terr && S.duel.attacks.length) {
-    const a = S.duel.attacks.slice().sort((x, y) => x.until - y.until)[0];
-    const o = terrOwnerInfo(a.idx, a.by);
-    return { id: 'defend', text: `⚠ ${o.name} îți atacă sectorul ${terrCell(a.idx).label}! Câștigă duelul în ${fmtTime(a.until - S.time)} sau îl pierzi.`, label: '⚔️ Apără', act: 'terrDefend', args: a.idx, why: whyDuel(a.idx), urgent: true };
+    // întâi atacurile asupra clădirilor de venit, apoi cel care expiră primul
+    const a = S.duel.attacks.slice().sort((x, y) => (incomeAt(y.idx) ? 1 : 0) - (incomeAt(x.idx) ? 1 : 0) || x.until - y.until)[0];
+    const o = terrOwnerInfo(a.idx, a.by), bld = incomeAt(a.idx);
+    return { id: 'defend', text: `⚠ ${o.name} îți atacă sectorul ${terrCell(a.idx).label}${bld ? ` cu clădirea ta: ${incomeType(bld.type).name}` : ''}! Câștigă duelul în ${fmtTime(a.until - S.time)} sau îl pierzi${bld ? ' (clădirea se oprește)' : ''}.`, label: '⚔️ Apără', act: 'terrDefend', args: a.idx, why: whyDuel(a.idx), urgent: true };
   }
   const dly = dailyInfo(today || todayStr());
   if (!dly.claimed) return { id: 'daily', text: `Revendică bonusul zilnic: +${fmt(dly.cr)} CR și +${dly.dt} DT.`, label: 'Revendică', act: 'claimDaily' };
   if (!S.quick.played) return { id: 'firstQuick', text: 'Joacă primul tău Quiz Rapid: răspunzi tu la 10 întrebări și câștigi CR și DT.', label: '▶ Joacă', act: 'startQuick' };
   if (terr && isUnlocked('land') && !S.duel.captures && territoryCount() <= 1) return { id: 'firstSector', text: 'Cucerește primul sector: câștigă un duel de 7 întrebări cu un vecin. Fiecare sector îți dă bonusuri, iar AI-ul tău te ajută tot mai mult.', label: '⚔️ Teritoriu', act: 'gotoFeature', args: 'land' };
+  if (terr && isUnlocked('land') && incomeList().length < incomeSlots()) {
+    const ch = incomeCfg().types.reduce((m, t) => t.levels[0].cost < m.levels[0].cost ? t : m);
+    return { id: 'build', text: incomeList().length ? 'Ai un loc liber pentru o clădire de venit: construiește-o în interior, ferită de margine.' : 'Construiește prima clădire de venit (în interior, ferită de margine): produce CR, DT sau fragmente și când nu ești în joc.', label: '🏗 Construiește', act: 'gotoFeature', args: 'land', why: canPayCR(ch.levels[0].cost) ? '' : `Îți trebuie ${fmt(ch.levels[0].cost)} CR` };
+  }
   if (p.dt >= 10) {
     const stat = p.math <= p.trivia ? 'math' : 'trivia';
     return { id: 'train', text: `Ai ${p.dt} DT: antrenează-ți AI-ul (${stat === 'math' ? 'IQ matematic' : 'cultură generală'}) ca să te ajute la întrebări.`, label: 'Antrenează ×10', act: 'train', args: { stat, n: 10 }, why: whyTrain(10) };

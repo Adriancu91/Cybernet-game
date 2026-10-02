@@ -1246,6 +1246,8 @@ function showAwaySummary(before, ms) {
     ['Tokeni de date', `+${Math.max(0, d(before.dt, S.player.dt))} DT`],
     ['Cărți vândute', d(before.sold, counter('cardSold') + counter('nftSold'))],
     ['Comisioane stand', `+${fmt(d(before.comm, S.market.standEarned))} CR`],
+    ...(before.passiveCR !== undefined && (counter('passive_cr') + counter('passive_dt') + counter('passive_shards') > before.passiveCR + before.passiveDT + before.passiveSh)
+      ? [['Venit pasiv (clădiri)', `+${fmt(counter('passive_cr') - before.passiveCR)} CR · +${counter('passive_dt') - before.passiveDT} DT · +${counter('passive_shards') - before.passiveSh} fragmente`]] : []),
     ['Sectoare în Teritoriu', `${territoryCount()}${before.terr !== undefined && territoryCount() !== before.terr ? ` (${territoryCount() - before.terr > 0 ? '+' : ''}${territoryCount() - before.terr})` : ''}${S.duel.attacks.length ? ' · <b class="bad">⚠ atacat!</b>' : ''}`],
   ];
   if (g && before.vault !== null) rows.push(['Seiful breslei', `+${fmt(d(before.vault, g.vault))} GV`]);

@@ -145,7 +145,7 @@ function runSelfTests(opts) {
         case 25: if (chance(0.05)) { S.player.rating = 1750; updatePlayerLeague(); actRebirth(); } break;
         case 26: actToggleLock(anyNft()); break;
         case 27: if (chance(0.2)) actCreateGuild('Test Guild ' + randInt(1, 999)); break;
-        case 29: if (chance(0.1)) terrSpawnAttack(); break;
+        case 29: if (chance(0.1)) terrSpawnAttack(); if (chance(0.3)) actBuildIncome(pick(terrMap()).i, pick(['farm', 'mine', 'lab'])); if (chance(0.1) && incomeList().length) { const b = pick(incomeList()); if (chance(0.5)) actUpgradeIncome(b.id); else if (chance(0.5)) actMoveIncome(b.id, pick(terrMap()).i); else actDismantleIncome(b.id); } break;
         case 30: if (chance(0.05)) simulate(CONFIG.TERRITORY.attack.timerMs / 4); break;
         case 28: S.player.rating = clamp(S.player.rating + randInt(-50, 80), 800, 2000); updatePlayerLeague(); break;
         default: simulate(randInt(1, 120) * 1000);
@@ -498,6 +498,86 @@ function runSelfTests(opts) {
     quickAskAI(QUICK);
     assert(QUICK.aiHint.conf <= Math.round(T.accCap * 100), 'accuracy over cap: ' + QUICK.aiHint.conf);
     QUICK = null;
+  });
+
+  test('Border rule: only edges next to foreign sectors; the map edge is safe; attacks only hit borders', () => {
+    fresh(206); count('soloPlayed');
+    const T = CONFIG.TERRITORY, N = T.size, home = T.home;
+    // tot rândul de jos + rândul de deasupra: rândul de jos e interior (marginea hărții nu contează)
+    for (let x = 0; x < N; x++) { S.territory.owner[(N - 1) * N + x] = 'p'; S.territory.owner[(N - 2) * N + x] = 'p'; }
+    S.territory.rev++; syncLand();
+    for (let x = 0; x < N; x++) {
+      assert(!terrIsBorder((N - 1) * N + x), 'bottom row cell ' + x + ' should be interior (map edge is not a border)');
+      assert(terrIsBorder((N - 2) * N + x), 'second row cell ' + x + ' should be a border');
+    }
+    const border = new Set(terrBorderSectors().map(c => c.i));
+    assert(border.size === N && [...border].every(i => terrIsBorder(i) && i !== home), 'terrBorderSectors mismatch');
+    for (let k = 0; k < 200; k++) { const a = terrSpawnAttack(true); assert(a && terrIsBorder(a.idx) && a.idx !== home, 'attack on a non-border sector ' + (a && a.idx)); S.duel.attacks = []; }
+    // un colț exterior al hărții, cu ambii vecini ai tăi, e interior
+    fresh(207);
+    const corner = (N - 1) * N; // stânga-jos
+    for (const i of [corner, corner + 1, corner - N]) S.territory.owner[i] = 'p';
+    S.territory.rev++;
+    assert(!terrIsBorder(corner) && !terrExposed(corner), 'map corner should be safe');
+  });
+
+  test('Income buildings: slots by territory, rich ×2, deactivate on loss, reactivate on recapture, offline cap', () => {
+    fresh(208); QUICK = null; count('soloPlayed');
+    const T = CONFIG.TERRITORY, I = T.income;
+    S.player.cr = 1e6;
+    assert(incomeSlots(1) === 0 && incomeSlots(I.slotsFirstAt) === 1 && incomeSlots(I.slotsFirstAt + I.slotsEvery) === 2 && incomeSlots(49) === I.slotsMax, 'slot formula');
+    assert(whyBuildIncome(T.home, 'farm').indexOf(String(I.slotsFirstAt)) >= 0, 'no slot with 1 sector');
+    terrGrowContiguous(I.slotsFirstAt - 1);
+    assert(actBuildIncome(T.home, 'farm').ok, 'build on home failed');
+    const mine = terrMap().filter(c => isPlayerSector(c.i) && c.i !== T.home);
+    assert(!actBuildIncome(mine[0].i, 'mine').ok && whyBuildIncome(mine[0].i, 'mine').startsWith('Toate'), 'slot limit ignored');
+    assert(!actBuildIncome(terrMap().find(c => !isPlayerSector(c.i)).i, 'mine').ok, 'built on a foreign sector');
+    // venit: 1 h de producție
+    const farm = incomeAt(T.home), cr0 = counter('passive_cr'), rate = incomeRate(farm);
+    S.duel.nextAttackAt = 1e15;
+    simulate(CONFIG.HOUR);
+    assert(Math.abs(counter('passive_cr') - cr0 - rate) <= 1, `farm produced ${counter('passive_cr') - cr0}, expected ${rate}`);
+    // offline: plafonat la OFFLINE_CAP_HOURS
+    const c1 = counter('passive_cr');
+    simulate(offlineMs(48 * CONFIG.HOUR));
+    assert(Math.abs(counter('passive_cr') - c1 - rate * CONFIG.OFFLINE_CAP_HOURS) <= 2, 'offline accrual not capped: ' + (counter('passive_cr') - c1));
+    // sector bogat: ×2
+    const rich = [...terrRichSet()];
+    assert(rich.length === TERR_DISTRICTS.reduce((s, D) => s + I.richPerDistrict[D.tier], 0) && !rich.includes(T.home), 'rich sector count');
+    terrGrowContiguous(I.slotsEvery * 2); // mai multe locuri
+    const richMine = rich.find(i => isPlayerSector(i));
+    const target = richMine !== undefined ? richMine : rich[0];
+    if (!isPlayerSector(target)) terrSetOwner(target, 'p');
+    assert(actBuildIncome(target, 'mine').ok, 'build on rich failed');
+    assert(incomeRate(incomeAt(target)) === I.types.find(t => t.id === 'mine').levels[0].rate * I.richMult, 'rich multiplier');
+    // clădire pe margine: se dezactivează la pierdere, se reactivează la recucerire
+    const edge = terrBorderSectors().find(c => !incomeAt(c.i));
+    assert(edge && actBuildIncome(edge.i, 'lab').ok, 'build on border failed');
+    const lab = incomeAt(edge.i);
+    assert(terrExposed(edge.i), 'border building should be exposed');
+    const a = { idx: edge.i, by: S.bots[0].id, at: S.time, until: S.time + 1000 };
+    S.duel.attacks = [a];
+    simulate(2000);
+    assert(!isPlayerSector(edge.i) && !incomeActive(lab) && incomeList().includes(lab), 'building should stay but be inactive');
+    const sh0 = counter('passive_shards');
+    simulate(3 * CONFIG.HOUR);
+    assert(counter('passive_shards') === sh0, 'inactive building still produces');
+    assert(incomeTotals().inactive === 1, 'inactive count');
+    S.territory.cd = {};
+    const r = playDuel(edge.i, () => true, () => false);
+    assert(r.win && isPlayerSector(edge.i) && incomeActive(lab) && r.reactivated, 'recapture did not reactivate');
+    // atacurile preferă sectoarele cu clădiri
+    let hits = 0, n = 0;
+    for (let k = 0; k < 300; k++) { const x = terrSpawnAttack(true); if (x) { n++; if (incomeAt(x.idx)) hits++; } S.duel.attacks = []; }
+    const bordersWith = terrBorderSectors().filter(c => incomeAt(c.i)).length, borders = terrBorderSectors().length;
+    if (bordersWith) assert(hits / n > bordersWith / borders, 'buildings are not preferred targets');
+    // mutare și demontare (50%)
+    const free = terrMap().find(c => isPlayerSector(c.i) && !incomeAt(c.i) && !terrExposed(c.i));
+    assert(free && actMoveIncome(lab.id, free.i).ok && lab.idx === free.i && !terrExposed(lab.idx), 'move failed');
+    const crD = S.player.cr, refund = incomeRefund(lab);
+    assert(refund === Math.floor(incomeInvested(lab) * I.dismantleRefund) && actDismantleIncome(lab.id).ok && S.player.cr === crD + refund && !incomeList().includes(lab), 'dismantle');
+    assert(actUpgradeIncome(farm.id).ok && farm.level === 1 && incomeRate(farm) > rate, 'upgrade');
+    invariants('income');
   });
 
   test('Old saves: bought land becomes contiguous sectors, stands keep working', () => {

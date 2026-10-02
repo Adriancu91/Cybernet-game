@@ -254,6 +254,8 @@ function step(dtMs) {
   if (typeof metaStep === 'function') metaStep(dtMs);
 }
 
+// offline: se simulează cel mult CONFIG.OFFLINE_CAP_HOURS (și pentru venitul pasiv din Teritoriu)
+function offlineMs(ms) { return Math.max(0, Math.min(ms, CONFIG.OFFLINE_CAP_HOURS * CONFIG.HOUR)); }
 // run many steps (offline catch-up, debug speed)
 function simulate(ms) {
   const n = Math.floor(ms / CONFIG.TICK_MS);

@@ -7,10 +7,10 @@
 
   function snapshot() {
     const g = playerGuild();
-    return { cr: S.player.cr, dt: S.player.dt, sold: counter('cardSold') + counter('nftSold'), comm: S.market.standEarned, terr: typeof territoryCount === 'function' ? territoryCount() : 0, vault: g ? g.vault : null };
+    return { cr: S.player.cr, dt: S.player.dt, sold: counter('cardSold') + counter('nftSold'), comm: S.market.standEarned, terr: typeof territoryCount === 'function' ? territoryCount() : 0, passiveCR: counter('passive_cr'), passiveDT: counter('passive_dt'), passiveSh: counter('passive_shards'), vault: g ? g.vault : null };
   }
   function catchUp(ms, showSummary) {
-    ms = Math.min(ms, CONFIG.OFFLINE_CAP_HOURS * CONFIG.HOUR);
+    ms = offlineMs(ms);
     if (ms < CONFIG.TICK_MS) return;
     const before = snapshot();
     onLog = null; // don't flood the DOM while simulating

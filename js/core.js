@@ -97,7 +97,7 @@ function newState(seed) {
     tutorialStep: 0,
     quick: { day: '', dayGames: 0, played: 0, best: 0, survPlayed: 0, survBest: 0 },
     unlock: { all: false, seen: [], fresh: null },
-    territory: { owner: [], explored: {}, cd: {}, botAcc: 0, rev: 0, feed: [] },   // harta rețelei (js/territory.js)
+    territory: { owner: [], explored: {}, cd: {}, botAcc: 0, rev: 0, feed: [], buildings: [] },   // harta rețelei (js/territory.js)
     duel: { wins: 0, losses: 0, captures: 0, defended: 0, lost: 0, played: 0, attacks: [], nextAttackAt: -1 },
   };
   const prev = S; S = s;
